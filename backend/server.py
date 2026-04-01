@@ -46,10 +46,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # Middlewares Setup
 cors_origins_str = os.environ.get('CORS_ORIGINS', '')
 if cors_origins_str and cors_origins_str != '*':
-    cors_origins = [origin.strip() for origin in cors_origins_str.split(',') if origin.strip()]
+    # Saneamento robusto: remove aspas, barras no final e espaços de todas as URLs passadas
+    cors_origins = [
+        origin.strip().strip('"').strip("'").rstrip('/')
+        for origin in cors_origins_str.split(',') if origin.strip()
+    ]
 else:
-    cors_origins = ["http://localhost:3000", "http://localhost:5173"]
-    logger.warning("⚠️ CORS_ORIGINS não configurado - usando apenas localhost")
+    # Se não configurado, garante pelo menos o domínio de produção e localhost
+    cors_origins = [
+        "https://app.client4you.com.br",
+        "http://localhost:3000",
+        "http://localhost:5173"
+    ]
+    logger.warning("⚠️ CORS_ORIGINS não configurado via env var - usando origin padrão de produção")
 
 app.add_middleware(
     CORSMiddleware,

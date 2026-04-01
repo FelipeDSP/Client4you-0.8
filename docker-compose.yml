@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: client4you-backend
+    restart: unless-stopped
+    # Porta removida para evitar conflito. O Coolify fará o roteamento interno.
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS}
+      - LOGIN_LOCKOUT_DURATION=${LOGIN_LOCKOUT_DURATION}
+      - LOGIN_WINDOW_DURATION=${LOGIN_WINDOW_DURATION}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - WAHA_DEFAULT_URL=${WAHA_DEFAULT_URL}
+      - WAHA_MASTER_KEY=${WAHA_MASTER_KEY}
+      - KIWIFY_WEBHOOK_SECRET=${KIWIFY_WEBHOOK_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - SMTP_USE_TLS=${SMTP_USE_TLS}
+      - ADMIN_IP_WHITELIST=${ADMIN_IP_WHITELIST}
+    volumes:
+      - backend-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_BACKEND_URL=${VITE_BACKEND_URL}
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+        - VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID}
+        - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
+        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
+    container_name: client4you-frontend
+    restart: unless-stopped
+    # Porta 80 removida. O Traefik enviará o tráfego para cá automaticamente.
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - app_network
+
+volumes:
+  backend-uploads:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge

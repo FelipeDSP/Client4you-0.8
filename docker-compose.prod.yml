@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_BACKEND_URL=${BACKEND_URL}
+      - VITE_SUPABASE_URL=${SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - VITE_TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - client4you
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - SERP_API_KEY=${SERP_API_KEY}
+      - WAHA_DEFAULT_URL=${WAHA_DEFAULT_URL}
+      - WAHA_MASTER_KEY=${WAHA_MASTER_KEY}
+      - KIWIFY_SECRET=${KIWIFY_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+    restart: unless-stopped
+    networks:
+      - client4you
+
+networks:
+  client4you:
+    driver: bridge

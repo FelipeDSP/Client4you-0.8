@@ -1,0 +1,271 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.agent_configs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL UNIQUE,
+  enabled boolean DEFAULT false,
+  name text DEFAULT 'Assistente Virtual'::text,
+  personality text,
+  system_prompt text,
+  welcome_message text,
+  response_delay integer DEFAULT 3,
+  max_response_length integer DEFAULT 500,
+  tone text DEFAULT 'professional'::text,
+  auto_qualify boolean DEFAULT true,
+  blocked_topics ARRAY DEFAULT '{}'::text[],
+  working_hours jsonb DEFAULT '{"end": "18:00", "start": "09:00", "enabled": false, "timezone": "America/Sao_Paulo"}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  language text DEFAULT 'pt-BR'::text,
+  qualification_questions jsonb DEFAULT '[]'::jsonb,
+  openai_api_key text,
+  model text DEFAULT 'gpt-4.1-mini'::text,
+  temperature numeric DEFAULT 0.7,
+  CONSTRAINT agent_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_configs_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.audit_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  user_email text NOT NULL,
+  action text NOT NULL CHECK (char_length(action) <= 100),
+  target_type text NOT NULL CHECK (target_type = ANY (ARRAY['user'::text, 'company'::text, 'quota'::text, 'role'::text, 'settings'::text])),
+  target_id uuid,
+  target_email text,
+  details jsonb,
+  ip_address text,
+  user_agent text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.bot_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  phone text NOT NULL,
+  status text DEFAULT 'ativo'::text CHECK (status = ANY (ARRAY['ativo'::text, 'pausado'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT bot_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT bot_sessions_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.campaign_contacts (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  campaign_id uuid,
+  name text NOT NULL DEFAULT 'Sem nome'::text,
+  phone text NOT NULL,
+  email text,
+  category text,
+  extra_data jsonb DEFAULT '{}'::jsonb,
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'sent'::text, 'error'::text, 'skipped'::text])),
+  error_message text,
+  sent_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT campaign_contacts_pkey PRIMARY KEY (id),
+  CONSTRAINT campaign_contacts_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id)
+);
+CREATE TABLE public.campaigns (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  company_id uuid,
+  user_id uuid,
+  name text NOT NULL,
+  status text DEFAULT 'draft'::text CHECK (status = ANY (ARRAY['draft'::text, 'ready'::text, 'running'::text, 'paused'::text, 'completed'::text, 'cancelled'::text])),
+  message_type text DEFAULT 'text'::text CHECK (message_type = ANY (ARRAY['text'::text, 'image'::text, 'document'::text])),
+  message_text text NOT NULL,
+  media_url text,
+  media_filename text,
+  interval_min integer DEFAULT 30,
+  interval_max integer DEFAULT 60,
+  start_time text,
+  end_time text,
+  daily_limit integer,
+  working_days ARRAY DEFAULT '{0,1,2,3,4}'::integer[],
+  total_contacts integer DEFAULT 0,
+  sent_count integer DEFAULT 0,
+  error_count integer DEFAULT 0,
+  pending_count integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  started_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  CONSTRAINT campaigns_pkey PRIMARY KEY (id),
+  CONSTRAINT campaigns_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id),
+  CONSTRAINT campaigns_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.companies (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  slug text NOT NULL UNIQUE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  timezone text DEFAULT 'America/Sao_Paulo'::text,
+  CONSTRAINT companies_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.company_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL UNIQUE,
+  serpapi_key text,
+  waha_api_url text,
+  waha_api_key text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  waha_session text DEFAULT 'default'::text,
+  CONSTRAINT company_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT company_settings_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.ip_whitelist (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  ip_address text NOT NULL CHECK (ip_address ~ '^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$'::text),
+  description text,
+  enabled boolean NOT NULL DEFAULT true,
+  created_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ip_whitelist_pkey PRIMARY KEY (id),
+  CONSTRAINT ip_whitelist_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id),
+  CONSTRAINT ip_whitelist_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.leads (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  search_id uuid,
+  name text NOT NULL,
+  phone text,
+  email text,
+  website text,
+  address text,
+  has_whatsapp boolean DEFAULT false,
+  has_email boolean DEFAULT false,
+  rating numeric,
+  reviews_count integer DEFAULT 0,
+  category text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT leads_pkey PRIMARY KEY (id),
+  CONSTRAINT leads_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id),
+  CONSTRAINT leads_search_id_fkey FOREIGN KEY (search_id) REFERENCES public.search_history(id)
+);
+CREATE TABLE public.login_attempts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  email text NOT NULL CHECK (char_length(email) <= 255),
+  ip_address text NOT NULL,
+  user_agent text,
+  success boolean NOT NULL DEFAULT false,
+  failure_reason text,
+  turnstile_token text,
+  turnstile_valid boolean DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT login_attempts_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.message_logs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  campaign_id uuid,
+  contact_id uuid,
+  contact_name text,
+  contact_phone text,
+  status text CHECK (status = ANY (ARRAY['pending'::text, 'sent'::text, 'error'::text, 'skipped'::text])),
+  error_message text,
+  message_sent text,
+  sent_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT message_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT message_logs_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
+  CONSTRAINT message_logs_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.campaign_contacts(id)
+);
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  company_id uuid,
+  type character varying NOT NULL,
+  title character varying NOT NULL,
+  message text NOT NULL,
+  link character varying,
+  read boolean DEFAULT false,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  read_at timestamp with time zone,
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT notifications_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  email text NOT NULL,
+  full_name text,
+  avatar_url text,
+  company_id uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  session_token text,
+  last_login_at timestamp with time zone,
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT profiles_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.search_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  user_id uuid,
+  query text NOT NULL,
+  location text NOT NULL,
+  results_count integer DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT search_history_pkey PRIMARY KEY (id),
+  CONSTRAINT search_history_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id),
+  CONSTRAINT search_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.subscriptions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL UNIQUE,
+  plan_id text NOT NULL DEFAULT 'demo'::text,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'cancelled'::text, 'expired'::text])),
+  demo_used boolean DEFAULT false,
+  current_period_start timestamp with time zone DEFAULT now(),
+  current_period_end timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT subscriptions_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.user_2fa (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  secret text NOT NULL,
+  enabled boolean NOT NULL DEFAULT false,
+  backup_codes ARRAY,
+  last_used_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_2fa_pkey PRIMARY KEY (id),
+  CONSTRAINT user_2fa_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.user_quotas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  company_id uuid,
+  plan_type character varying DEFAULT 'demo'::character varying CHECK (plan_type::text = ANY (ARRAY['demo'::character varying, 'basico'::character varying, 'intermediario'::character varying, 'avancado'::character varying]::text[])),
+  plan_name character varying,
+  leads_limit integer DEFAULT 5,
+  leads_used integer DEFAULT 0,
+  campaigns_limit integer DEFAULT 0,
+  campaigns_used integer DEFAULT 0,
+  messages_limit integer DEFAULT 0,
+  messages_sent integer DEFAULT 0,
+  reset_date date DEFAULT (CURRENT_DATE + '1 mon'::interval),
+  plan_expires_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_quotas_pkey PRIMARY KEY (id),
+  CONSTRAINT user_quotas_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_quotas_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);
+CREATE TABLE public.user_roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  role USER-DEFINED NOT NULL DEFAULT 'member'::app_role,
+  company_id uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_roles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_roles_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
+);

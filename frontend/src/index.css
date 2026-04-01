@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Client4you Design System - Orange Primary Theme */
+
+@layer base {
+  :root {
+    /* --- Base do Site (Claro/Cinza Suave) --- */
+    --background: 0 0% 98%; /* Cinza muito claro, quase branco */
+    --foreground: 222 47% 11%; /* Texto escuro */
+
+    /* --- Cor Principal (LARANJA Client4you) 🟠 --- */
+    --primary: 40 100% 50%; /* Laranja vibrante #FFAA00 */
+    --primary-foreground: 0 0% 100%; /* Texto branco no botão laranja */
+
+    /* --- Sidebar (Gradiente de Azul Escuro) --- */
+    --sidebar-background: 210 50% 20%; /* Azul escuro profissional */
+    --sidebar-foreground: 0 0% 98%; /* Texto claro na sidebar */
+    --sidebar-primary: 40 100% 50%; /* Laranja para item ativo */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 50% 30%; /* Azul ligeiramente mais claro ao passar o mouse */
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 210 50% 25%; /* Borda sutil */
+    --sidebar-ring: 40 100% 50%;
+    
+    /* --- Secondary (Verde Client4you) 🟢 --- */
+    --secondary: 120 100% 40%; /* Verde #33cc33 */
+    --secondary-foreground: 0 0% 100%;
+    
+    /* --- Accent (Azul Client4you) 🔵 --- */
+    --accent: 210 100% 40%; /* Azul #0066cc */
+    --accent-foreground: 0 0% 100%;
+    
+    /* --- Outras Cores (Soft UI) --- */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --muted: 40 10% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 20% 91%;
+    --input: 40 20% 91%;
+    --ring: 40 100% 50%;
+    --radius: 0.75rem; /* Bordas arredondadas maiores (Soft UI) */
+  }
+}
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 40 100% 50%; /* Laranja */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 120 100% 40%; /* Verde */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 210 100% 40%; /* Azul */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 40 100% 50%;
+
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 40 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 12%;
+    --sidebar-ring: 40 100% 50%;
+  }
+  
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+  
+  /* Garantir que botões primários sempre usem o laranja */
+  .bg-primary {
+    background-color: hsl(40 100% 50%) !important;
+  }
+  
+  .text-primary {
+    color: hsl(40 100% 50%) !important;
+  }
+  
+  .border-primary {
+    border-color: hsl(40 100% 50%) !important;
+  }
+}

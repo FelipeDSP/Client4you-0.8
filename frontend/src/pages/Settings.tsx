@@ -3,10 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Globe, 
@@ -27,13 +30,26 @@ import {
   Ban,
   Lightbulb,
   ShieldAlert,
-  FileWarning
+  FileWarning,
+  Send,
+  Repeat,
+  Save,
+  Timer,
+  CalendarClock,
+  MessagesSquare,
+  Target,
 } from "lucide-react";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // URL do backend a partir de variável de ambiente
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.REACT_APP_BACKEND_URL || '';
@@ -73,11 +89,11 @@ type WAStatus = "LOADING" | "DISCONNECTED" | "STARTING" | "SCANNING" | "CONNECTE
 // Componente de Status Badge
 const StatusBadge = ({ status }: { status: WAStatus }) => {
   const config = {
-    LOADING: { label: "Carregando...", variant: "secondary" as const, className: "bg-gray-100 text-gray-600" },
-    DISCONNECTED: { label: "Desconectado", variant: "destructive" as const, className: "bg-red-100 text-red-700" },
-    STARTING: { label: "Iniciando...", variant: "secondary" as const, className: "bg-blue-100 text-blue-700" },
-    SCANNING: { label: "Aguardando QR", variant: "secondary" as const, className: "bg-yellow-100 text-yellow-700" },
-    CONNECTED: { label: "Conectado", variant: "default" as const, className: "bg-green-100 text-green-700" }
+    LOADING: { label: "Carregando...", className: "bg-gray-100 text-gray-600" },
+    DISCONNECTED: { label: "Desconectado", className: "bg-red-100 text-red-700" },
+    STARTING: { label: "Iniciando...", className: "bg-blue-100 text-blue-700" },
+    SCANNING: { label: "Aguardando QR", className: "bg-yellow-100 text-yellow-700" },
+    CONNECTED: { label: "Conectado", className: "bg-green-100 text-green-700" }
   };
   
   const { label, className } = config[status];
@@ -96,6 +112,16 @@ const GuideStep = ({ number, title, description, active }: { number: number; tit
     </div>
   </div>
 );
+
+// ======================== TIMEZONE SELECT ========================
+const TIMEZONES = [
+  { value: "America/Sao_Paulo", label: "Brasília (SP/RJ/MG)", offset: "-03:00" },
+  { value: "America/Manaus", label: "Amazonas (Manaus)", offset: "-04:00" },
+  { value: "America/Rio_Branco", label: "Acre (Rio Branco)", offset: "-05:00" },
+  { value: "America/Cuiaba", label: "Mato Grosso (Cuiabá)", offset: "-04:00" },
+  { value: "America/Noronha", label: "Fernando de Noronha", offset: "-02:00" },
+  { value: "America/Fortaleza", label: "Nordeste (Fortaleza)", offset: "-03:00" },
+];
 
 export default function Settings() {
   const { setPageTitle } = usePageTitle();
@@ -124,9 +150,45 @@ export default function Settings() {
   });
   const [riskCheckbox, setRiskCheckbox] = useState(false);
 
+  // ======================== ESTADOS DA TAB DISPARADOR & REMARKETING ========================
+  const [isSavingDispatcher, setIsSavingDispatcher] = useState(false);
+  
+  // Dispatcher defaults
+  const [dispIntervalMin, setDispIntervalMin] = useState(60);
+  const [dispIntervalMax, setDispIntervalMax] = useState(180);
+  const [dispDailyLimit, setDispDailyLimit] = useState(200);
+  const [dispStartTime, setDispStartTime] = useState("08:00");
+  const [dispEndTime, setDispEndTime] = useState("18:00");
+  const [dispTimezone, setDispTimezone] = useState("America/Sao_Paulo");
+  
+  // Remarketing
+  const [rmktEnabled, setRmktEnabled] = useState(false);
+  const [rmktDelayDays, setRmktDelayDays] = useState(5);
+  const [rmktDailyLimit, setRmktDailyLimit] = useState(50);
+  const [rmktTime, setRmktTime] = useState("09:00");
+  const [rmktIntervalMin, setRmktIntervalMin] = useState(120);
+  const [rmktIntervalMax, setRmktIntervalMax] = useState(300);
+  const [rmktMessage, setRmktMessage] = useState("");
+
+  // Carregar dados do settings para os campos locais
   useEffect(() => {
     if (settings) {
-        if (settings.serpapiKey) setSerpapiKey(settings.serpapiKey);
+      if (settings.serpapiKey) setSerpapiKey(settings.serpapiKey);
+      // Dispatcher
+      setDispIntervalMin(settings.defaultIntervalMin);
+      setDispIntervalMax(settings.defaultIntervalMax);
+      setDispDailyLimit(settings.defaultDailyLimit);
+      setDispStartTime(settings.defaultStartTime);
+      setDispEndTime(settings.defaultEndTime);
+      setDispTimezone(settings.timezone);
+      // Remarketing
+      setRmktEnabled(settings.remarketingEnabled);
+      setRmktDelayDays(settings.remarketingDelayDays);
+      setRmktDailyLimit(settings.remarketingDailyLimit);
+      setRmktTime(settings.remarketingTime);
+      setRmktIntervalMin(settings.remarketingIntervalMin);
+      setRmktIntervalMax(settings.remarketingIntervalMax);
+      setRmktMessage(settings.remarketingMessage);
     }
   }, [settings]);
 
@@ -214,6 +276,53 @@ export default function Settings() {
     }
   };
 
+  // Handler para salvar Disparador & Remarketing
+  const handleSaveDispatcher = async () => {
+    // Validações
+    if (dispIntervalMin < 30) {
+      toast({ variant: "destructive", title: "Intervalo muito baixo", description: "O intervalo mínimo deve ser pelo menos 30 segundos para segurança." });
+      return;
+    }
+    if (dispIntervalMax <= dispIntervalMin) {
+      toast({ variant: "destructive", title: "Intervalo inválido", description: "O intervalo máximo deve ser maior que o mínimo." });
+      return;
+    }
+    if (dispStartTime >= dispEndTime) {
+      toast({ variant: "destructive", title: "Horário inválido", description: "O horário de início deve ser anterior ao de término." });
+      return;
+    }
+    if (rmktEnabled && rmktIntervalMin < 60) {
+      toast({ variant: "destructive", title: "Intervalo de remarketing muito baixo", description: "O intervalo mínimo do remarketing deve ser pelo menos 60 segundos." });
+      return;
+    }
+
+    setIsSavingDispatcher(true);
+    try {
+      const success = await saveSettings({
+        defaultIntervalMin: dispIntervalMin,
+        defaultIntervalMax: dispIntervalMax,
+        defaultDailyLimit: dispDailyLimit,
+        defaultStartTime: dispStartTime,
+        defaultEndTime: dispEndTime,
+        timezone: dispTimezone,
+        remarketingEnabled: rmktEnabled,
+        remarketingDelayDays: rmktDelayDays,
+        remarketingDailyLimit: rmktDailyLimit,
+        remarketingTime: rmktTime,
+        remarketingIntervalMin: rmktIntervalMin,
+        remarketingIntervalMax: rmktIntervalMax,
+        remarketingMessage: rmktMessage,
+      });
+      if (success) {
+        toast({ title: "Configurações salvas!", description: "Disparador e remarketing atualizados." });
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar as configurações." });
+    } finally {
+      setIsSavingDispatcher(false);
+    }
+  };
+
   // Determinar qual passo está ativo no guia
   const getCurrentStep = () => {
     if (waStatus === "DISCONNECTED") return 1;
@@ -235,20 +344,42 @@ export default function Settings() {
     }
   };
 
+  // Cálculos de estimativa para o Disparador
+  const avgInterval = (dispIntervalMin + dispIntervalMax) / 2;
+  const hoursPerDay = (() => {
+    const [sh, sm] = dispStartTime.split(':').map(Number);
+    const [eh, em] = dispEndTime.split(':').map(Number);
+    return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
+  })();
+  const messagesPerHour = avgInterval > 0 ? Math.floor(3600 / avgInterval) : 0;
+  const estimatedDailyCapacity = Math.min(dispDailyLimit, messagesPerHour * hoursPerDay);
+
+  // Nível de risco visual
+  const getRiskLevel = (limit: number) => {
+    if (limit <= 100) return { label: "Seguro", color: "bg-green-100 text-green-700" };
+    if (limit <= 200) return { label: "Recomendado", color: "bg-green-100 text-green-700" };
+    if (limit <= 500) return { label: "Moderado", color: "bg-yellow-100 text-yellow-700" };
+    return { label: "Alto Risco", color: "bg-red-100 text-red-700" };
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
       {/* Cabeçalho */}
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Configurações</h2>
-        <p className="text-muted-foreground">Gerencie conexões e preferências da sua conta.</p>
+        <p className="text-muted-foreground">Gerencie conexões, disparos e preferências da sua conta.</p>
       </div>
 
       {/* Tabs de Configuração */}
       <Tabs defaultValue="whatsapp" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
           <TabsTrigger value="whatsapp" className="gap-2">
             <MessageCircle className="h-4 w-4" />
             WhatsApp
+          </TabsTrigger>
+          <TabsTrigger value="dispatcher" className="gap-2">
+            <Send className="h-4 w-4" />
+            Disparador
           </TabsTrigger>
           <TabsTrigger value="integrations" className="gap-2">
             <Globe className="h-4 w-4" />
@@ -259,7 +390,7 @@ export default function Settings() {
         {/* ========== TAB WHATSAPP ========== */}
         <TabsContent value="whatsapp" className="space-y-6">
           
-          {/* Tela de Aceitação de Riscos - Mostrada apenas se ainda não aceitou */}
+          {/* Tela de Aceitação de Riscos */}
           {!hasAcceptedRisks ? (
             <Card className="border-amber-200 bg-gradient-to-b from-amber-50 to-white">
               <CardHeader className="text-center pb-2">
@@ -273,7 +404,6 @@ export default function Settings() {
               </CardHeader>
               
               <CardContent className="space-y-6 max-w-2xl mx-auto">
-                {/* Lista de Avisos */}
                 <div className="space-y-4">
                   <div className="flex items-start gap-3 p-4 bg-white rounded-lg border border-amber-200">
                     <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -309,21 +439,19 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Dicas para evitar bloqueio */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="font-medium text-blue-800 flex items-center gap-2 mb-2">
                     <Lightbulb className="h-4 w-4" />
                     Dicas para evitar problemas:
                   </p>
                   <ul className="text-sm text-blue-700 space-y-1 ml-6 list-disc">
-                    <li>Use intervalos de 30-60 segundos entre mensagens</li>
+                    <li>Use intervalos de 60-180 segundos entre mensagens</li>
                     <li>Limite a 100-200 mensagens por dia para números novos</li>
                     <li>Evite mensagens idênticas em massa</li>
                     <li>Não envie para números desconhecidos em excesso</li>
                   </ul>
                 </div>
 
-                {/* Checkbox e Botão de Aceitar */}
                 <div className="border-t pt-6 space-y-4">
                   <div className="flex items-start space-x-3">
                     <Checkbox 
@@ -484,7 +612,6 @@ export default function Settings() {
 
             {/* Coluna Lateral - Guia e Dicas */}
             <div className="space-y-6">
-              {/* Guia Passo a Passo */}
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -520,7 +647,6 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
-              {/* Dicas de Boas Práticas */}
               <Card className="border-blue-100 bg-blue-50/50">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2 text-blue-800">
@@ -531,7 +657,7 @@ export default function Settings() {
                 <CardContent className="space-y-3 text-sm text-blue-900">
                   <div className="flex items-start gap-2">
                     <Clock className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span>Use intervalos de <strong>30-60 segundos</strong> entre mensagens</span>
+                    <span>Use intervalos de <strong>60-180 segundos</strong> entre mensagens</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Shield className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -550,6 +676,389 @@ export default function Settings() {
             </div>
           </div>
           )}
+        </TabsContent>
+
+        {/* ========== TAB DISPARADOR & REMARKETING ========== */}
+        <TabsContent value="dispatcher" className="space-y-6">
+          
+          {/* Fuso Horário */}
+          <Card className="border-blue-100 bg-blue-50/30">
+            <CardContent className="pt-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-600" />
+                <Label className="font-semibold text-blue-900">Fuso Horário</Label>
+              </div>
+              <Select value={dispTimezone} onValueChange={setDispTimezone}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      <div className="flex items-center gap-2">
+                        <span>{tz.label}</span>
+                        <span className="text-xs text-muted-foreground">({tz.offset})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-blue-700">
+                Todos os horários de disparo e remarketing seguirão este fuso horário.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Card Defaults do Disparador */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-100">
+                  <Send className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <CardTitle>Configurações Padrão do Disparador</CardTitle>
+                  <CardDescription>
+                    Valores padrão usados ao criar novas campanhas. Cada campanha pode ter valores próprios.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              
+              {/* Intervalo entre mensagens */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Timer className="h-4 w-4 text-slate-500" />
+                    Intervalo entre mensagens
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>Tempo aleatório entre cada envio. Intervalos maiores reduzem o risco de bloqueio.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <Badge variant="outline" className="font-mono">
+                    {dispIntervalMin}s - {dispIntervalMax}s
+                  </Badge>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Mínimo (seg)</Label>
+                    <Input 
+                      type="number" 
+                      value={dispIntervalMin} 
+                      onChange={(e) => setDispIntervalMin(Math.max(30, Number(e.target.value)))}
+                      min={30}
+                      className="font-mono"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Mínimo recomendado: 30s</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Máximo (seg)</Label>
+                    <Input 
+                      type="number" 
+                      value={dispIntervalMax} 
+                      onChange={(e) => setDispIntervalMax(Math.max(dispIntervalMin + 10, Number(e.target.value)))}
+                      min={dispIntervalMin + 10}
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Horário de operação */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-slate-500" />
+                  Horário de operação padrão
+                </Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Início</Label>
+                    <Input 
+                      type="time" 
+                      value={dispStartTime} 
+                      onChange={(e) => setDispStartTime(e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Término</Label>
+                    <Input 
+                      type="time" 
+                      value={dispEndTime} 
+                      onChange={(e) => setDispEndTime(e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Limite diário */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Target className="h-4 w-4 text-slate-500" />
+                  Limite diário padrão de envios
+                </Label>
+                <Select value={String(dispDailyLimit)} onValueChange={(v) => setDispDailyLimit(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="50">
+                      <div className="flex items-center gap-2">
+                        <span>50 mensagens</span>
+                        <Badge className="bg-green-100 text-green-700 text-[10px]">Muito Seguro</Badge>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="100">
+                      <div className="flex items-center gap-2">
+                        <span>100 mensagens</span>
+                        <Badge className="bg-green-100 text-green-700 text-[10px]">Seguro</Badge>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="200">
+                      <div className="flex items-center gap-2">
+                        <span>200 mensagens</span>
+                        <Badge className="bg-green-100 text-green-700 text-[10px]">Recomendado</Badge>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="300">
+                      <div className="flex items-center gap-2">
+                        <span>300 mensagens</span>
+                        <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">Moderado</Badge>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="500">
+                      <div className="flex items-center gap-2">
+                        <span>500 mensagens</span>
+                        <Badge className="bg-orange-100 text-orange-700 text-[10px]">Alto Volume</Badge>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Estimativa */}
+              <Card className="bg-slate-50 border-slate-200">
+                <CardContent className="pt-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-slate-200 rounded-lg">
+                      <Info className="h-4 w-4 text-slate-600" />
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium text-slate-700">Estimativa de Capacidade</p>
+                      <p className="text-slate-600">
+                        ~<strong>{messagesPerHour}</strong> msg/hora • 
+                        ~<strong>{Math.round(estimatedDailyCapacity)}</strong> msg/dia
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Operando {hoursPerDay.toFixed(1)}h/dia
+                      </p>
+                      <Badge className={`mt-1 ${getRiskLevel(dispDailyLimit).color}`}>
+                        {getRiskLevel(dispDailyLimit).label}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+
+          {/* Card Remarketing */}
+          <Card className={`transition-colors ${rmktEnabled ? 'border-purple-200' : ''}`}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${rmktEnabled ? 'bg-purple-100' : 'bg-gray-100'}`}>
+                    <Repeat className={`h-5 w-5 ${rmktEnabled ? 'text-purple-600' : 'text-gray-400'}`} />
+                  </div>
+                  <div>
+                    <CardTitle>Remarketing Automático</CardTitle>
+                    <CardDescription>
+                      Reenvie mensagens para leads que não responderam após um período.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Switch 
+                  checked={rmktEnabled} 
+                  onCheckedChange={setRmktEnabled}
+                  className="scale-110"
+                />
+              </div>
+            </CardHeader>
+            
+            {rmktEnabled && (
+              <CardContent className="space-y-6 pt-0">
+                <Alert className="border-amber-200 bg-amber-50">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800">Cuidado com o volume</AlertTitle>
+                  <AlertDescription className="text-amber-700">
+                    O remarketing envia mensagens para leads inativos. Use limites conservadores 
+                    para evitar bloqueio do número.
+                  </AlertDescription>
+                </Alert>
+
+                {/* Dias de espera */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-slate-500" />
+                    Dias de espera antes do remarketing
+                  </Label>
+                  <Select value={String(rmktDelayDays)} onValueChange={(v) => setRmktDelayDays(Number(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 dias</SelectItem>
+                      <SelectItem value="5">5 dias (Recomendado)</SelectItem>
+                      <SelectItem value="7">7 dias</SelectItem>
+                      <SelectItem value="10">10 dias</SelectItem>
+                      <SelectItem value="14">14 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Tempo mínimo sem resposta do lead antes de enviar a mensagem de remarketing.
+                  </p>
+                </div>
+
+                {/* Horário de disparo */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <CalendarClock className="h-4 w-4 text-slate-500" />
+                    Horário de disparo do remarketing
+                  </Label>
+                  <Input 
+                    type="time" 
+                    value={rmktTime} 
+                    onChange={(e) => setRmktTime(e.target.value)}
+                    className="font-mono max-w-[200px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    O remarketing será executado diariamente neste horário.
+                  </p>
+                </div>
+
+                {/* Limite diário do remarketing */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-slate-500" />
+                    Limite diário de remarketing
+                  </Label>
+                  <Select value={String(rmktDailyLimit)} onValueChange={(v) => setRmktDailyLimit(Number(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="20">
+                        <div className="flex items-center gap-2">
+                          <span>20 mensagens</span>
+                          <Badge className="bg-green-100 text-green-700 text-[10px]">Seguro</Badge>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="50">
+                        <div className="flex items-center gap-2">
+                          <span>50 mensagens</span>
+                          <Badge className="bg-green-100 text-green-700 text-[10px]">Recomendado</Badge>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="100">
+                        <div className="flex items-center gap-2">
+                          <span>100 mensagens</span>
+                          <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">Moderado</Badge>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Intervalo entre mensagens de remarketing */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 text-slate-500" />
+                      Intervalo entre mensagens
+                    </Label>
+                    <Badge variant="outline" className="font-mono">
+                      {rmktIntervalMin}s - {rmktIntervalMax}s
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Mínimo (seg)</Label>
+                      <Input 
+                        type="number" 
+                        value={rmktIntervalMin} 
+                        onChange={(e) => setRmktIntervalMin(Math.max(60, Number(e.target.value)))}
+                        min={60}
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Máximo (seg)</Label>
+                      <Input 
+                        type="number" 
+                        value={rmktIntervalMax} 
+                        onChange={(e) => setRmktIntervalMax(Math.max(rmktIntervalMin + 30, Number(e.target.value)))}
+                        min={rmktIntervalMin + 30}
+                        className="font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Template da mensagem */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MessagesSquare className="h-4 w-4 text-slate-500" />
+                    Mensagem de Remarketing
+                  </Label>
+                  <Textarea 
+                    value={rmktMessage}
+                    onChange={(e) => setRmktMessage(e.target.value)}
+                    placeholder="Olá {nome}! Vi que conversamos recentemente..."
+                    rows={4}
+                    className="resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <Badge variant="outline" className="cursor-pointer hover:bg-slate-100" onClick={() => setRmktMessage(prev => prev + " {nome}")}>
+                      {`{nome}`}
+                    </Badge>
+                    <Badge variant="outline" className="cursor-pointer hover:bg-slate-100" onClick={() => setRmktMessage(prev => prev + " {empresa}")}>
+                      {`{empresa}`}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use variáveis como {`{nome}`} para personalizar. A mensagem será variada por IA para evitar repetições.
+                  </p>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Botão Salvar */}
+          <div className="flex justify-end">
+            <Button 
+              onClick={handleSaveDispatcher} 
+              disabled={isSavingDispatcher}
+              className="gap-2 bg-[#F59600] hover:bg-[#e08900] text-white min-w-[200px]"
+              size="lg"
+            >
+              {isSavingDispatcher ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Salvar Configurações
+            </Button>
+          </div>
         </TabsContent>
 
         {/* ========== TAB INTEGRAÇÕES ========== */}
@@ -614,7 +1123,6 @@ export default function Settings() {
                 )}
               </Button>
 
-              {/* Explicação da integração */}
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertTitle>Para que serve?</AlertTitle>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { usePlanPermissions } from "@/hooks/usePlanPermissions";
 import { PlanBlockedOverlay } from "@/components/PlanBlockedOverlay";
+import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { 
   Bot, 
-  Zap, 
   Settings2, 
   MessageSquare, 
   Brain, 
@@ -42,103 +42,86 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface AgentConfig {
-  enabled: boolean;
-  name: string;
-  personality: string;
-  systemPrompt: string;
-  welcomeMessage: string;
-  responseDelay: number;
-  maxResponseLength: number;
-  tone: 'formal' | 'casual' | 'professional' | 'friendly';
-  language: 'pt-BR' | 'en-US' | 'es-ES';
-  autoQualify: boolean;
-  qualificationQuestions: string[];
-  blockedTopics: string[];
-  workingHours: {
-    enabled: boolean;
-    start: string;
-    end: string;
-    timezone: string;
-  };
-}
-
-const DEFAULT_CONFIG: AgentConfig = {
-  enabled: false,
-  name: "Assistente Virtual",
-  personality: "Sou um assistente virtual prestativo e profissional.",
-  systemPrompt: `Você é um assistente virtual de atendimento ao cliente.
-
-Suas principais responsabilidades:
-- Responder dúvidas sobre produtos e serviços
-- Qualificar leads interessados
-- Agendar reuniões quando solicitado
-- Direcionar para atendimento humano quando necessário
-
-Regras importantes:
-- Seja sempre cordial e profissional
-- Não invente informações que não possui
-- Colete nome, email e telefone quando apropriado
-- Pergunte como pode ajudar se a mensagem for vaga`,
-  welcomeMessage: "Olá! 👋 Sou o assistente virtual da empresa. Como posso ajudar você hoje?",
-  responseDelay: 3,
-  maxResponseLength: 500,
-  tone: 'professional',
-  language: 'pt-BR',
-  autoQualify: true,
-  qualificationQuestions: [
-    "Qual é o seu nome?",
-    "Qual é o seu email para contato?",
-    "Como conheceu nossa empresa?"
-  ],
-  blockedTopics: [],
-  workingHours: {
-    enabled: false,
-    start: "09:00",
-    end: "18:00",
-    timezone: "America/Sao_Paulo"
-  }
-};
-
 export default function AgenteIA() {
   const { setPageTitle } = usePageTitle();
   const { permissions, isLoading: isLoadingPermissions } = usePlanPermissions();
+  const { settings, saveSettings, isSaving: isSavingGlobal } = useCompanySettings();
   const { toast } = useToast();
   
-  const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
+  // Campos locais do formulário
+  const [enabled, setEnabled] = useState(false);
+  const [name, setName] = useState("Assistente Virtual");
+  const [tone, setTone] = useState<'formal' | 'casual' | 'professional' | 'friendly'>('professional');
+  const [personality, setPersonality] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [responseDelay, setResponseDelay] = useState(3);
+  const [maxResponseLength, setMaxResponseLength] = useState(500);
+  const [workingHoursEnabled, setWorkingHoursEnabled] = useState(false);
+  const [workingHoursStart, setWorkingHoursStart] = useState("09:00");
+  const [workingHoursEnd, setWorkingHoursEnd] = useState("18:00");
+  const [autoQualify, setAutoQualify] = useState(true);
+  const [qualificationQuestions, setQualificationQuestions] = useState<string[]>([]);
+  const [blockedTopics, setBlockedTopics] = useState<string[]>([]);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     setPageTitle("Agente IA", Bot);
   }, [setPageTitle]);
 
-  // Carregar configurações salvas (localStorage por enquanto)
+  // Carregar configurações do Supabase
   useEffect(() => {
-    const saved = localStorage.getItem('agentConfig');
-    if (saved) {
-      try {
-        setConfig(JSON.parse(saved));
-      } catch (e) {
-        console.error('Error loading agent config:', e);
-      }
+    if (settings && !isInitialized) {
+      setEnabled(settings.agentEnabled);
+      setName(settings.agentName);
+      setTone(settings.agentTone);
+      setPersonality(settings.agentPersonality);
+      setSystemPrompt(settings.agentSystemPrompt);
+      setWelcomeMessage(settings.agentWelcomeMessage);
+      setResponseDelay(settings.agentResponseDelay);
+      setMaxResponseLength(settings.agentMaxResponseLength);
+      setWorkingHoursEnabled(settings.agentWorkingHoursEnabled);
+      setWorkingHoursStart(settings.agentWorkingHoursStart);
+      setWorkingHoursEnd(settings.agentWorkingHoursEnd);
+      setAutoQualify(settings.agentAutoQualify);
+      setQualificationQuestions(settings.agentQualificationQuestions);
+      setBlockedTopics(settings.agentBlockedTopics);
+      setIsInitialized(true);
     }
-  }, []);
+  }, [settings, isInitialized]);
+
+  const markChanged = () => setHasChanges(true);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Salvar no localStorage por enquanto
-      localStorage.setItem('agentConfig', JSON.stringify(config));
-      
-      // TODO: Integrar com backend/n8n
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Configurações salvas!",
-        description: "As configurações do agente foram atualizadas.",
+      const success = await saveSettings({
+        agentEnabled: enabled,
+        agentName: name,
+        agentTone: tone,
+        agentPersonality: personality,
+        agentSystemPrompt: systemPrompt,
+        agentWelcomeMessage: welcomeMessage,
+        agentResponseDelay: responseDelay,
+        agentMaxResponseLength: maxResponseLength,
+        agentWorkingHoursEnabled: workingHoursEnabled,
+        agentWorkingHoursStart: workingHoursStart,
+        agentWorkingHoursEnd: workingHoursEnd,
+        agentAutoQualify: autoQualify,
+        agentQualificationQuestions: qualificationQuestions,
+        agentBlockedTopics: blockedTopics,
       });
-      setHasChanges(false);
+      
+      if (success) {
+        toast({
+          title: "Configurações salvas!",
+          description: "As configurações do agente foram atualizadas no banco de dados.",
+        });
+        setHasChanges(false);
+      }
     } catch (error) {
       toast({
         variant: "destructive",
@@ -148,11 +131,6 @@ export default function AgenteIA() {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const updateConfig = <K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) => {
-    setConfig(prev => ({ ...prev, [key]: value }));
-    setHasChanges(true);
   };
 
   // Loading
@@ -222,7 +200,7 @@ export default function AgenteIA() {
           )}
           <Button 
             onClick={handleSave} 
-            disabled={isSaving || !hasChanges}
+            disabled={isSaving || isSavingGlobal || !hasChanges}
             className="gap-2 bg-purple-600 hover:bg-purple-700"
           >
             {isSaving ? (
@@ -236,27 +214,27 @@ export default function AgenteIA() {
       </div>
 
       {/* Status Card */}
-      <Card className={`border-2 ${config.enabled ? 'border-green-200 bg-green-50/50' : 'border-slate-200'}`}>
+      <Card className={`border-2 ${enabled ? 'border-green-200 bg-green-50/50' : 'border-slate-200'}`}>
         <CardContent className="flex items-center justify-between p-6">
           <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-full ${config.enabled ? 'bg-green-100' : 'bg-slate-100'}`}>
-              <Bot className={`h-6 w-6 ${config.enabled ? 'text-green-600' : 'text-slate-400'}`} />
+            <div className={`p-3 rounded-full ${enabled ? 'bg-green-100' : 'bg-slate-100'}`}>
+              <Bot className={`h-6 w-6 ${enabled ? 'text-green-600' : 'text-slate-400'}`} />
             </div>
             <div>
               <h3 className="font-semibold text-lg">
-                Agente {config.enabled ? 'Ativo' : 'Desativado'}
+                Agente {enabled ? 'Ativo' : 'Desativado'}
               </h3>
               <p className="text-sm text-muted-foreground">
-                {config.enabled 
-                  ? 'O agente está respondendo mensagens automaticamente' 
+                {enabled 
+                  ? 'O agente está configurado para responder mensagens automaticamente' 
                   : 'Ative para começar a responder automaticamente'}
               </p>
             </div>
           </div>
           
           <Switch
-            checked={config.enabled}
-            onCheckedChange={(checked) => updateConfig('enabled', checked)}
+            checked={enabled}
+            onCheckedChange={(checked) => { setEnabled(checked); markChanged(); }}
             className="scale-125"
           />
         </CardContent>
@@ -267,10 +245,10 @@ export default function AgenteIA() {
         <CardContent className="flex items-start gap-4 p-4">
           <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-amber-800">Integração Pendente</p>
+            <p className="text-sm font-medium text-amber-800">Integração com n8n Pendente</p>
             <p className="text-sm text-amber-700 mt-1">
-              O Agente IA está em fase Beta. A integração com n8n será configurada em breve. 
-              Por enquanto, configure os parâmetros do seu agente.
+              As configurações são salvas no banco de dados. A integração completa com o workflow n8n 
+              para leitura automática desses parâmetros será feita em breve. Por enquanto, configure os parâmetros do seu agente.
             </p>
           </div>
         </CardContent>
@@ -312,20 +290,20 @@ export default function AgenteIA() {
             <CardContent className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome do Agente</Label>
+                  <Label htmlFor="agent-name">Nome do Agente</Label>
                   <Input
-                    id="name"
-                    value={config.name}
-                    onChange={(e) => updateConfig('name', e.target.value)}
+                    id="agent-name"
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); markChanged(); }}
                     placeholder="Ex: Sofia, Assistente Virtual"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="tone">Tom de Comunicação</Label>
+                  <Label htmlFor="agent-tone">Tom de Comunicação</Label>
                   <Select 
-                    value={config.tone} 
-                    onValueChange={(value: AgentConfig['tone']) => updateConfig('tone', value)}
+                    value={tone} 
+                    onValueChange={(value: typeof tone) => { setTone(value); markChanged(); }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -341,11 +319,11 @@ export default function AgenteIA() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="personality">Descrição da Personalidade</Label>
+                <Label htmlFor="agent-personality">Descrição da Personalidade</Label>
                 <Textarea
-                  id="personality"
-                  value={config.personality}
-                  onChange={(e) => updateConfig('personality', e.target.value)}
+                  id="agent-personality"
+                  value={personality}
+                  onChange={(e) => { setPersonality(e.target.value); markChanged(); }}
                   placeholder="Descreva como o agente deve se comportar..."
                   rows={3}
                 />
@@ -355,11 +333,11 @@ export default function AgenteIA() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="welcome">Mensagem de Boas-vindas</Label>
+                <Label htmlFor="agent-welcome">Mensagem de Boas-vindas</Label>
                 <Textarea
-                  id="welcome"
-                  value={config.welcomeMessage}
-                  onChange={(e) => updateConfig('welcomeMessage', e.target.value)}
+                  id="agent-welcome"
+                  value={welcomeMessage}
+                  onChange={(e) => { setWelcomeMessage(e.target.value); markChanged(); }}
                   placeholder="Primeira mensagem enviada ao contato..."
                   rows={2}
                 />
@@ -383,7 +361,7 @@ export default function AgenteIA() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="systemPrompt">Instruções do Agente</Label>
+                  <Label htmlFor="agent-systemPrompt">Instruções do Agente</Label>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -397,9 +375,9 @@ export default function AgenteIA() {
                   </TooltipProvider>
                 </div>
                 <Textarea
-                  id="systemPrompt"
-                  value={config.systemPrompt}
-                  onChange={(e) => updateConfig('systemPrompt', e.target.value)}
+                  id="agent-systemPrompt"
+                  value={systemPrompt}
+                  onChange={(e) => { setSystemPrompt(e.target.value); markChanged(); }}
                   placeholder="Defina as instruções detalhadas..."
                   rows={12}
                   className="font-mono text-sm"
@@ -441,14 +419,14 @@ export default function AgenteIA() {
               <div className="space-y-4">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Delay de Resposta: {config.responseDelay}s</Label>
+                    <Label>Delay de Resposta: {responseDelay}s</Label>
                     <span className="text-sm text-muted-foreground">
                       Simula tempo de digitação
                     </span>
                   </div>
                   <Slider
-                    value={[config.responseDelay]}
-                    onValueChange={([value]) => updateConfig('responseDelay', value)}
+                    value={[responseDelay]}
+                    onValueChange={([value]) => { setResponseDelay(value); markChanged(); }}
                     min={1}
                     max={10}
                     step={1}
@@ -461,11 +439,11 @@ export default function AgenteIA() {
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Tamanho Máximo: {config.maxResponseLength} caracteres</Label>
+                    <Label>Tamanho Máximo: {maxResponseLength} caracteres</Label>
                   </div>
                   <Slider
-                    value={[config.maxResponseLength]}
-                    onValueChange={([value]) => updateConfig('maxResponseLength', value)}
+                    value={[maxResponseLength]}
+                    onValueChange={([value]) => { setMaxResponseLength(value); markChanged(); }}
                     min={100}
                     max={1000}
                     step={50}
@@ -488,36 +466,27 @@ export default function AgenteIA() {
                     </p>
                   </div>
                   <Switch
-                    checked={config.workingHours.enabled}
-                    onCheckedChange={(checked) => updateConfig('workingHours', {
-                      ...config.workingHours,
-                      enabled: checked
-                    })}
+                    checked={workingHoursEnabled}
+                    onCheckedChange={(checked) => { setWorkingHoursEnabled(checked); markChanged(); }}
                   />
                 </div>
 
-                {config.workingHours.enabled && (
+                {workingHoursEnabled && (
                   <div className="grid gap-4 sm:grid-cols-2 p-4 bg-slate-50 rounded-lg">
                     <div className="space-y-2">
                       <Label>Início</Label>
                       <Input
                         type="time"
-                        value={config.workingHours.start}
-                        onChange={(e) => updateConfig('workingHours', {
-                          ...config.workingHours,
-                          start: e.target.value
-                        })}
+                        value={workingHoursStart}
+                        onChange={(e) => { setWorkingHoursStart(e.target.value); markChanged(); }}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Fim</Label>
                       <Input
                         type="time"
-                        value={config.workingHours.end}
-                        onChange={(e) => updateConfig('workingHours', {
-                          ...config.workingHours,
-                          end: e.target.value
-                        })}
+                        value={workingHoursEnd}
+                        onChange={(e) => { setWorkingHoursEnd(e.target.value); markChanged(); }}
                       />
                     </div>
                   </div>
@@ -548,19 +517,20 @@ export default function AgenteIA() {
                   </p>
                 </div>
                 <Switch
-                  checked={config.autoQualify}
-                  onCheckedChange={(checked) => updateConfig('autoQualify', checked)}
+                  checked={autoQualify}
+                  onCheckedChange={(checked) => { setAutoQualify(checked); markChanged(); }}
                 />
               </div>
 
-              {config.autoQualify && (
+              {autoQualify && (
                 <div className="space-y-3 p-4 bg-slate-50 rounded-lg">
                   <Label>Perguntas de Qualificação</Label>
                   <Textarea
-                    value={config.qualificationQuestions.join('\n')}
-                    onChange={(e) => updateConfig('qualificationQuestions', 
-                      e.target.value.split('\n').filter(q => q.trim())
-                    )}
+                    value={qualificationQuestions.join('\n')}
+                    onChange={(e) => { 
+                      setQualificationQuestions(e.target.value.split('\n').filter(q => q.trim())); 
+                      markChanged(); 
+                    }}
                     placeholder="Uma pergunta por linha..."
                     rows={4}
                   />
@@ -584,10 +554,11 @@ export default function AgenteIA() {
             </CardHeader>
             <CardContent>
               <Textarea
-                value={config.blockedTopics.join('\n')}
-                onChange={(e) => updateConfig('blockedTopics', 
-                  e.target.value.split('\n').filter(t => t.trim())
-                )}
+                value={blockedTopics.join('\n')}
+                onChange={(e) => { 
+                  setBlockedTopics(e.target.value.split('\n').filter(t => t.trim())); 
+                  markChanged(); 
+                }}
                 placeholder="Um tópico por linha (ex: preços, concorrentes, política)..."
                 rows={4}
               />

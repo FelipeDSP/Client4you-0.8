@@ -32,6 +32,7 @@ export default function Profile() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [memberSince, setMemberSince] = useState<string | null>(null);
 
   // Paleta de Cores da Marca
   const BRAND_BLUE = "#054173";
@@ -47,13 +48,14 @@ export default function Profile() {
         
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name, avatar_url')
+          .select('full_name, avatar_url, created_at')
           .eq('id', user.id)
           .single();
 
         if (profile) {
           setName(profile.full_name || user.name || "");
           setAvatarUrl(profile.avatar_url);
+          if (profile.created_at) setMemberSince(profile.created_at);
         }
 
         if (user.companyId) {
@@ -436,14 +438,28 @@ export default function Profile() {
               </div>
               <div className="flex justify-between py-3 border-b border-slate-100 last:border-0">
                 <span className="text-slate-600">Status</span>
-                <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                  Ativo
-                </span>
+                {(() => {
+                  const subStatus = quota?.subscription_status || (quota ? 'active' : 'inactive');
+                  const statusMap: Record<string, { label: string; className: string }> = {
+                    active: { label: 'Ativo', className: 'bg-green-50 text-green-700 ring-green-600/20' },
+                    suspended: { label: 'Suspenso', className: 'bg-red-50 text-red-700 ring-red-600/20' },
+                    canceled: { label: 'Cancelado', className: 'bg-gray-50 text-gray-700 ring-gray-600/20' },
+                    inactive: { label: 'Inativo', className: 'bg-yellow-50 text-yellow-700 ring-yellow-600/20' },
+                  };
+                  const cfg = statusMap[subStatus] || statusMap.active;
+                  return (
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${cfg.className}`}>
+                      {cfg.label}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="flex justify-between py-3">
                 <span className="text-slate-600">Membro desde</span>
                 <span className="text-slate-900 font-medium">
-                  {new Date().getFullYear()}
+                  {memberSince
+                    ? new Date(memberSince).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+                    : '—'}
                 </span>
               </div>
             </CardContent>

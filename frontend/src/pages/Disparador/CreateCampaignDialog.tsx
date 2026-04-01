@@ -68,21 +68,26 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
   
   const [isUploading, setIsUploading] = useState(false);
   
-  // Configurações de Intervalo
-  const [intervalMin, setIntervalMin] = useState(30);
-  const [intervalMax, setIntervalMax] = useState(120);
+  // Configurações de Intervalo (defaults carregados das configurações da empresa)
+  const [intervalMin, setIntervalMin] = useState(60);
+  const [intervalMax, setIntervalMax] = useState(180);
   
   // Configurações de Horário
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
   const [workingDays, setWorkingDays] = useState<string[]>(["1", "2", "3", "4", "5"]);
-  const [dailyLimit, setDailyLimit] = useState(500);
+  const [dailyLimit, setDailyLimit] = useState(200);
 
-  // Carregar timezone das configurações da empresa
+  // Carregar defaults das configurações da empresa
   useEffect(() => {
-    if (settings?.timezone) {
+    if (settings) {
       setTimezone(settings.timezone);
+      setIntervalMin(settings.defaultIntervalMin);
+      setIntervalMax(settings.defaultIntervalMax);
+      setDailyLimit(settings.defaultDailyLimit);
+      setStartTime(settings.defaultStartTime);
+      setEndTime(settings.defaultEndTime);
     }
   }, [settings]);
 
@@ -256,10 +261,11 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
     setMediaFile(null);
     setContactsFile(null);
     setWorkingDays(["1", "2", "3", "4", "5"]);
-    setStartTime("08:00");
-    setEndTime("18:00");
-    setIntervalMin(30);
-    setIntervalMax(120);
+    setStartTime(settings?.defaultStartTime || "08:00");
+    setEndTime(settings?.defaultEndTime || "18:00");
+    setIntervalMin(settings?.defaultIntervalMin || 60);
+    setIntervalMax(settings?.defaultIntervalMax || 180);
+    setDailyLimit(settings?.defaultDailyLimit || 200);
   };
 
   // Calcular tempo estimado de disparo
@@ -571,8 +577,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
                     <Input 
                       type="number" 
                       value={intervalMin} 
-                      onChange={(e) => setIntervalMin(Math.max(10, Number(e.target.value)))}
-                      min={10}
+                      onChange={(e) => setIntervalMin(Math.max(30, Number(e.target.value)))}
+                      min={30}
                       className="font-mono"
                     />
                   </div>

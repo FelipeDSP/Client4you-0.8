@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCampaigns } from "@/hooks/useCampaigns";
-import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { Loader2, Calendar, Clock, MessageSquare, Image as ImageIcon, Check, UploadCloud, FileSpreadsheet, Globe, Info, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
@@ -53,9 +52,19 @@ const PRESET_SCHEDULES = [
   { label: "Dia Inteiro", start: "08:00", end: "21:00", days: ["1", "2", "3", "4", "5"] },
 ];
 
+// Defaults internos da campanha — cada campanha tem configuração independente
+const CAMPAIGN_DEFAULTS = {
+  intervalMin: 60,
+  intervalMax: 180,
+  dailyLimit: 200,
+  startTime: "08:00",
+  endTime: "18:00",
+  timezone: "America/Sao_Paulo",
+  workingDays: ["1", "2", "3", "4", "5"],
+} as const;
+
 export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCampaignDialogProps) {
   const { createCampaign, uploadContacts, isCreating } = useCampaigns();
-  const { settings } = useCompanySettings();
   
   // Estado do Formulário
   const [name, setName] = useState("");
@@ -68,28 +77,16 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
   
   const [isUploading, setIsUploading] = useState(false);
   
-  // Configurações de Intervalo (defaults carregados das configurações da empresa)
-  const [intervalMin, setIntervalMin] = useState(60);
-  const [intervalMax, setIntervalMax] = useState(180);
+  // Configurações de Intervalo — por campanha, sem dependência de configurações globais
+  const [intervalMin, setIntervalMin] = useState(CAMPAIGN_DEFAULTS.intervalMin);
+  const [intervalMax, setIntervalMax] = useState(CAMPAIGN_DEFAULTS.intervalMax);
   
-  // Configurações de Horário
-  const [timezone, setTimezone] = useState("America/Sao_Paulo");
-  const [startTime, setStartTime] = useState("08:00");
-  const [endTime, setEndTime] = useState("18:00");
-  const [workingDays, setWorkingDays] = useState<string[]>(["1", "2", "3", "4", "5"]);
-  const [dailyLimit, setDailyLimit] = useState(200);
-
-  // Carregar defaults das configurações da empresa
-  useEffect(() => {
-    if (settings) {
-      setTimezone(settings.timezone);
-      setIntervalMin(settings.defaultIntervalMin);
-      setIntervalMax(settings.defaultIntervalMax);
-      setDailyLimit(settings.defaultDailyLimit);
-      setStartTime(settings.defaultStartTime);
-      setEndTime(settings.defaultEndTime);
-    }
-  }, [settings]);
+  // Configurações de Horário — por campanha
+  const [timezone, setTimezone] = useState(CAMPAIGN_DEFAULTS.timezone);
+  const [startTime, setStartTime] = useState(CAMPAIGN_DEFAULTS.startTime);
+  const [endTime, setEndTime] = useState(CAMPAIGN_DEFAULTS.endTime);
+  const [workingDays, setWorkingDays] = useState<string[]>([...CAMPAIGN_DEFAULTS.workingDays]);
+  const [dailyLimit, setDailyLimit] = useState(CAMPAIGN_DEFAULTS.dailyLimit);
 
   const applyPreset = (preset: typeof PRESET_SCHEDULES[0]) => {
     setStartTime(preset.start);
@@ -260,12 +257,12 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
     setMessageText("");
     setMediaFile(null);
     setContactsFile(null);
-    setWorkingDays(["1", "2", "3", "4", "5"]);
-    setStartTime(settings?.defaultStartTime || "08:00");
-    setEndTime(settings?.defaultEndTime || "18:00");
-    setIntervalMin(settings?.defaultIntervalMin || 60);
-    setIntervalMax(settings?.defaultIntervalMax || 180);
-    setDailyLimit(settings?.defaultDailyLimit || 200);
+    setWorkingDays([...CAMPAIGN_DEFAULTS.workingDays]);
+    setStartTime(CAMPAIGN_DEFAULTS.startTime);
+    setEndTime(CAMPAIGN_DEFAULTS.endTime);
+    setIntervalMin(CAMPAIGN_DEFAULTS.intervalMin);
+    setIntervalMax(CAMPAIGN_DEFAULTS.intervalMax);
+    setDailyLimit(CAMPAIGN_DEFAULTS.dailyLimit);
   };
 
   // Calcular tempo estimado de disparo

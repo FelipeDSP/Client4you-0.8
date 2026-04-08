@@ -30,7 +30,7 @@ const SESSION_TOKEN_KEY = 'app_session_token';
 async function fetchUserProfile(userId: string): Promise<User | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select("*, companies(name)")
     .eq("id", userId)
     .single();
 
@@ -39,15 +39,17 @@ async function fetchUserProfile(userId: string): Promise<User | null> {
     return null;
   }
 
+  const companyName = (data.companies as any)?.name || "";
+
   return {
     id: data.id,
     email: data.email,
     fullName: data.full_name,
     avatarUrl: data.avatar_url,
     companyId: data.company_id,
-    role: data.role || undefined,
+    role: (data as any).role || undefined,
     name: data.full_name || data.email.split("@")[0],
-    company: "",
+    company: companyName,
   };
 }
 
@@ -146,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .update({ 
             session_token: newToken,
             last_login_at: new Date().toISOString()
-          })
+          } as any)
           .eq("id", data.user.id);
         
         if (updateError) {

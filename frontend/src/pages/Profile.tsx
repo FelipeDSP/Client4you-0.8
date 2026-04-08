@@ -34,49 +34,21 @@ export default function Profile() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [memberSince, setMemberSince] = useState<string | null>(null);
 
-  // Paleta de Cores da Marca
-  const BRAND_BLUE = "#054173";
-  const BRAND_ORANGE = "#F59600";
 
-  // Carregar dados
+  // Carregar dados locais quando user estiver pronto
   useEffect(() => {
-    async function loadProfileData() {
-      if (!user) return;
-      
-      try {
-        setLoadingData(true);
-        
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, avatar_url, created_at')
-          .eq('id', user.id)
-          .single();
-
-        if (profile) {
-          setName(profile.full_name || user.name || "");
-          setAvatarUrl(profile.avatar_url);
-          if (profile.created_at) setMemberSince(profile.created_at);
-        }
-
-        if (user.companyId) {
-          const { data: companyData, error } = await supabase
-            .from('companies')
-            .select('name')
-            .eq('id', user.companyId)
-            .single();
-            
-          if (!error && companyData) {
-            setCompanyName(companyData.name);
-          }
-        }
-      } catch (error) {
-        console.error("Erro ao carregar perfil", error);
-      } finally {
-        setLoadingData(false);
-      }
-    }
-
-    loadProfileData();
+    if (!user) return;
+    
+    setLoadingData(true);
+    
+    setName(user.fullName || user.name || "");
+    setAvatarUrl(user.avatarUrl || null);
+    // Profile created_at não vem no contexto do UseAuth nativamente ainda se não alterarmos mais a fundo, 
+    // mas por praticidade podemos setar vazio ou ignorar já que o foco é remover query pesada.
+    // Para manter fiel sem quebrar:
+    setCompanyName(user.company || "");
+    
+    setLoadingData(false);
   }, [user]);
 
   // Upload de Avatar
@@ -152,7 +124,7 @@ export default function Profile() {
       toast({
         title: "Perfil salvo!",
         description: "Suas informações foram atualizadas com sucesso.",
-        className: "border-l-4 border-[#F59600]" // Laranja no sucesso
+        className: "border-l-4 border-primary" // Dinâmico da var
       });
     } catch (error) {
       console.error(error);
@@ -203,20 +175,16 @@ export default function Profile() {
   const getBadgeColor = (type: string) => {
     switch (type) {
       case 'demo': return 'bg-slate-500';
-      case 'basico': return `bg-[${BRAND_BLUE}]`; // Azul
-      case 'intermediario': return `bg-[${BRAND_ORANGE}]`; // Laranja
+      case 'basico': return `bg-blue-900`; // Azul
+      case 'intermediario': return `bg-primary`; // Laranja
       case 'avancado': return 'bg-purple-600';
-      default: return `bg-[${BRAND_ORANGE}]`;
+      default: return `bg-primary`;
     }
   };
 
-  if (loadingData && !name) {
-    return (
       <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#F59600]" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
-    );
-  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-10 animate-fade-in">
@@ -239,7 +207,7 @@ export default function Profile() {
                 <div className="relative group">
                   <Avatar className="h-24 w-24 border-4 border-white shadow-lg cursor-pointer">
                     <AvatarImage src={avatarUrl || ""} className="object-cover" />
-                    <AvatarFallback className="text-white text-3xl font-bold bg-[#F59600]">
+                    <AvatarFallback className="text-white text-3xl font-bold bg-primary">
                       {name?.charAt(0).toUpperCase() || "U"}
                     </AvatarFallback>
                   </Avatar>
@@ -269,7 +237,7 @@ export default function Profile() {
                   <CardDescription>Sua identidade na plataforma Client4You.</CardDescription>
                   <div className="pt-2">
                     {/* Badge de Email em Azul (Institucional) */}
-                    <Badge variant="outline" className="text-[#054173] border-[#054173]/20 bg-[#054173]/5 hover:bg-[#054173]/10">
+                    <Badge variant="outline" className="text-blue-900 border-blue-900/20 bg-blue-900/5 hover:bg-blue-900/10">
                       <Mail className="h-3 w-3 mr-1" />
                       {user?.email}
                     </Badge>
@@ -288,7 +256,7 @@ export default function Profile() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Seu nome"
-                    className="pl-10 border-slate-200 focus:border-[#F59600] focus:ring-[#F59600]"
+                    className="pl-10 border-slate-200 focus:border-primary focus:ring-primary"
                   />
                 </div>
               </div>
@@ -302,7 +270,7 @@ export default function Profile() {
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     placeholder="Nome da sua empresa"
-                    className="pl-10 border-slate-200 focus:border-[#F59600] focus:ring-[#F59600]"
+                    className="pl-10 border-slate-200 focus:border-primary focus:ring-primary"
                   />
                 </div>
               </div>
@@ -311,7 +279,7 @@ export default function Profile() {
               <Button 
                 onClick={handleSave} 
                 disabled={isSaving} 
-                className="gap-2 bg-[#F59600] hover:bg-[#F59600]/90 text-white shadow-sm transition-all"
+                className="gap-2 bg-primary hover:bg-primary/90 text-white shadow-sm transition-all"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {isSaving ? "Salvando..." : "Salvar Alterações"}
@@ -322,7 +290,7 @@ export default function Profile() {
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-3">
               <CardTitle className="flex items-center gap-2 text-base text-slate-800">
-                <Shield className="h-4 w-4 text-[#054173]" />
+                <Shield className="h-4 w-4 text-blue-900" />
                 Segurança e Acesso
               </CardTitle>
             </CardHeader>
@@ -347,14 +315,14 @@ export default function Profile() {
         {/* Coluna Direita: Plano e Consumo */}
         <div className="space-y-6">
           <Card className={`border shadow-sm overflow-hidden ${planType === 'avancado' ? 'border-purple-200' : 'border-slate-200'}`}>
-            <div className={`h-1.5 w-full ${planType === 'basico' ? 'bg-[#054173]' : planType === 'intermediario' ? 'bg-[#F59600]' : planType === 'avancado' ? 'bg-purple-600' : 'bg-slate-400'}`} />
+            <div className={`h-1.5 w-full ${planType === 'basico' ? 'bg-blue-900' : planType === 'intermediario' ? 'bg-primary' : planType === 'avancado' ? 'bg-purple-600' : 'bg-slate-400'}`} />
             <CardHeader className="pb-4 bg-white">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Seu Plano</p>
                   <h3 className="text-2xl font-bold text-slate-900">{planName}</h3>
                 </div>
-                <Badge className={`${planType === 'basico' ? 'bg-[#054173]' : planType === 'intermediario' ? 'bg-[#F59600]' : planType === 'avancado' ? 'bg-purple-600' : 'bg-slate-500'} text-white border-0 capitalize px-3 py-1`}>
+                <Badge className={`${planType === 'basico' ? 'bg-blue-900' : planType === 'intermediario' ? 'bg-primary' : planType === 'avancado' ? 'bg-purple-600' : 'bg-slate-500'} text-primary-foreground border-0 capitalize px-3 py-1`}>
                   {planType}
                 </Badge>
               </div>
@@ -372,7 +340,7 @@ export default function Profile() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600 font-medium">Buscas de Leads</span>
-                    <span className="text-[#054173] font-bold">
+                    <span className="text-blue-900 font-bold">
                       {quota?.leads_limit === -1 
                         ? `${quota?.leads_used} / ∞` 
                         : `${quota?.leads_used || 0} / ${quota?.leads_limit || 0}`}
@@ -381,14 +349,14 @@ export default function Profile() {
                   <Progress 
                     value={quota?.leads_limit === -1 ? 100 : ((quota?.leads_used || 0) / (quota?.leads_limit || 1)) * 100} 
                     className="h-2 bg-slate-100" 
-                    indicatorClassName="bg-[#054173]" // Azul para Leads
+                    indicatorClassName="bg-blue-900" // Azul para Leads
                   />
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600 font-medium">Disparos WhatsApp</span>
-                    <span className="text-[#F59600] font-bold">
+                    <span className="text-primary font-bold">
                       {quota?.messages_limit === -1 
                         ? `${quota?.messages_sent} / ∞` 
                         : `${quota?.messages_sent || 0} / ${quota?.messages_limit || 0}`}
@@ -397,14 +365,14 @@ export default function Profile() {
                   <Progress 
                     value={quota?.messages_limit === -1 ? 100 : ((quota?.messages_sent || 0) / (quota?.messages_limit || 1)) * 100} 
                     className="h-2 bg-slate-100"
-                    indicatorClassName="bg-[#F59600]" // Laranja para WhatsApp
+                    indicatorClassName="bg-primary" // Laranja para WhatsApp
                   />
                 </div>
               </div>
 
               {planType !== 'avancado' && (
                 <Button 
-                  className="w-full bg-gradient-to-r from-[#F59600] to-[#e08900] hover:from-[#e08900] hover:to-[#cc7a00] text-white shadow-md border-0 transition-all hover:scale-[1.02]" 
+                  className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md border-0 transition-all hover:scale-[1.02]" 
                   onClick={() => setShowUpgradeModal(true)}
                 >
                   <Crown className="mr-2 h-4 w-4 text-white/90" />
@@ -428,7 +396,7 @@ export default function Profile() {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-5 w-5 text-slate-400 hover:text-[#054173]" 
+                    className="h-5 w-5 text-slate-400 hover:text-blue-900" 
                     onClick={handleCopyCompanyId}
                     title="Copiar ID"
                   >

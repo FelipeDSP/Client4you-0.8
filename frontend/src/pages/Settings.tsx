@@ -113,15 +113,7 @@ const GuideStep = ({ number, title, description, active }: { number: number; tit
   </div>
 );
 
-// ======================== TIMEZONE SELECT ========================
-const TIMEZONES = [
-  { value: "America/Sao_Paulo", label: "Brasília (SP/RJ/MG)", offset: "-03:00" },
-  { value: "America/Manaus", label: "Amazonas (Manaus)", offset: "-04:00" },
-  { value: "America/Rio_Branco", label: "Acre (Rio Branco)", offset: "-05:00" },
-  { value: "America/Cuiaba", label: "Mato Grosso (Cuiabá)", offset: "-04:00" },
-  { value: "America/Noronha", label: "Fernando de Noronha", offset: "-02:00" },
-  { value: "America/Fortaleza", label: "Nordeste (Fortaleza)", offset: "-03:00" },
-];
+
 
 export default function Settings() {
   const { setPageTitle } = usePageTitle();
@@ -150,16 +142,8 @@ export default function Settings() {
   });
   const [riskCheckbox, setRiskCheckbox] = useState(false);
 
-  // ======================== ESTADOS DA TAB DISPARADOR & REMARKETING ========================
-  const [isSavingDispatcher, setIsSavingDispatcher] = useState(false);
-  
-  // Dispatcher defaults
-  const [dispIntervalMin, setDispIntervalMin] = useState(60);
-  const [dispIntervalMax, setDispIntervalMax] = useState(180);
-  const [dispDailyLimit, setDispDailyLimit] = useState(200);
-  const [dispStartTime, setDispStartTime] = useState("08:00");
-  const [dispEndTime, setDispEndTime] = useState("18:00");
-  const [dispTimezone, setDispTimezone] = useState("America/Sao_Paulo");
+  // ======================== ESTADOS DA TAB REMARKETING ========================
+  const [isSavingRemarketing, setIsSavingRemarketing] = useState(false);
   
   // Remarketing
   const [rmktEnabled, setRmktEnabled] = useState(false);
@@ -174,13 +158,6 @@ export default function Settings() {
   useEffect(() => {
     if (settings) {
       if (settings.serpapiKey) setSerpapiKey(settings.serpapiKey);
-      // Dispatcher
-      setDispIntervalMin(settings.defaultIntervalMin);
-      setDispIntervalMax(settings.defaultIntervalMax);
-      setDispDailyLimit(settings.defaultDailyLimit);
-      setDispStartTime(settings.defaultStartTime);
-      setDispEndTime(settings.defaultEndTime);
-      setDispTimezone(settings.timezone);
       // Remarketing
       setRmktEnabled(settings.remarketingEnabled);
       setRmktDelayDays(settings.remarketingDelayDays);
@@ -276,35 +253,20 @@ export default function Settings() {
     }
   };
 
-  // Handler para salvar Disparador & Remarketing
-  const handleSaveDispatcher = async () => {
-    // Validações
-    if (dispIntervalMin < 30) {
-      toast({ variant: "destructive", title: "Intervalo muito baixo", description: "O intervalo mínimo deve ser pelo menos 30 segundos para segurança." });
+  // Handler para salvar Remarketing
+  const handleSaveRemarketing = async () => {
+    if (rmktEnabled && rmktIntervalMin < 60) {
+      toast({ variant: "destructive", title: "Intervalo muito baixo", description: "O intervalo mínimo do remarketing deve ser pelo menos 60 segundos." });
       return;
     }
-    if (dispIntervalMax <= dispIntervalMin) {
+    if (rmktEnabled && rmktIntervalMax <= rmktIntervalMin) {
       toast({ variant: "destructive", title: "Intervalo inválido", description: "O intervalo máximo deve ser maior que o mínimo." });
       return;
     }
-    if (dispStartTime >= dispEndTime) {
-      toast({ variant: "destructive", title: "Horário inválido", description: "O horário de início deve ser anterior ao de término." });
-      return;
-    }
-    if (rmktEnabled && rmktIntervalMin < 60) {
-      toast({ variant: "destructive", title: "Intervalo de remarketing muito baixo", description: "O intervalo mínimo do remarketing deve ser pelo menos 60 segundos." });
-      return;
-    }
 
-    setIsSavingDispatcher(true);
+    setIsSavingRemarketing(true);
     try {
       const success = await saveSettings({
-        defaultIntervalMin: dispIntervalMin,
-        defaultIntervalMax: dispIntervalMax,
-        defaultDailyLimit: dispDailyLimit,
-        defaultStartTime: dispStartTime,
-        defaultEndTime: dispEndTime,
-        timezone: dispTimezone,
         remarketingEnabled: rmktEnabled,
         remarketingDelayDays: rmktDelayDays,
         remarketingDailyLimit: rmktDailyLimit,
@@ -314,12 +276,12 @@ export default function Settings() {
         remarketingMessage: rmktMessage,
       });
       if (success) {
-        toast({ title: "Configurações salvas!", description: "Disparador e remarketing atualizados." });
+        toast({ title: "Configurações salvas!", description: "Remarketing atualizado com sucesso." });
       }
     } catch (e) {
       toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar as configurações." });
     } finally {
-      setIsSavingDispatcher(false);
+      setIsSavingRemarketing(false);
     }
   };
 
@@ -344,23 +306,8 @@ export default function Settings() {
     }
   };
 
-  // Cálculos de estimativa para o Disparador
-  const avgInterval = (dispIntervalMin + dispIntervalMax) / 2;
-  const hoursPerDay = (() => {
-    const [sh, sm] = dispStartTime.split(':').map(Number);
-    const [eh, em] = dispEndTime.split(':').map(Number);
-    return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
-  })();
-  const messagesPerHour = avgInterval > 0 ? Math.floor(3600 / avgInterval) : 0;
-  const estimatedDailyCapacity = Math.min(dispDailyLimit, messagesPerHour * hoursPerDay);
 
-  // Nível de risco visual
-  const getRiskLevel = (limit: number) => {
-    if (limit <= 100) return { label: "Seguro", color: "bg-green-100 text-green-700" };
-    if (limit <= 200) return { label: "Recomendado", color: "bg-green-100 text-green-700" };
-    if (limit <= 500) return { label: "Moderado", color: "bg-yellow-100 text-yellow-700" };
-    return { label: "Alto Risco", color: "bg-red-100 text-red-700" };
-  };
+
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
@@ -378,8 +325,8 @@ export default function Settings() {
             WhatsApp
           </TabsTrigger>
           <TabsTrigger value="dispatcher" className="gap-2">
-            <Send className="h-4 w-4" />
-            Disparador
+            <Repeat className="h-4 w-4" />
+            Remarketing
           </TabsTrigger>
           <TabsTrigger value="integrations" className="gap-2">
             <Globe className="h-4 w-4" />
@@ -473,7 +420,7 @@ export default function Settings() {
                   <Button 
                     onClick={handleAcceptRisks}
                     disabled={!riskCheckbox}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                     size="lg"
                   >
                     <Shield className="mr-2 h-4 w-4" />
@@ -579,7 +526,7 @@ export default function Settings() {
                     <Button 
                       onClick={handleStartSession} 
                       disabled={isActionLoading || waStatus === 'CONNECTED' || waStatus === 'STARTING' || waStatus === 'SCANNING'}
-                      className="bg-green-600 hover:bg-green-700 gap-2"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
                       size="lg"
                     >
                       <Power className="h-4 w-4" /> 
@@ -678,199 +625,8 @@ export default function Settings() {
           )}
         </TabsContent>
 
-        {/* ========== TAB DISPARADOR & REMARKETING ========== */}
+        {/* ========== TAB REMARKETING ========== */}
         <TabsContent value="dispatcher" className="space-y-6">
-          
-          {/* Fuso Horário */}
-          <Card className="border-blue-100 bg-blue-50/30">
-            <CardContent className="pt-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-blue-600" />
-                <Label className="font-semibold text-blue-900">Fuso Horário</Label>
-              </div>
-              <Select value={dispTimezone} onValueChange={setDispTimezone}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIMEZONES.map((tz) => (
-                    <SelectItem key={tz.value} value={tz.value}>
-                      <div className="flex items-center gap-2">
-                        <span>{tz.label}</span>
-                        <span className="text-xs text-muted-foreground">({tz.offset})</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-blue-700">
-                Todos os horários de disparo e remarketing seguirão este fuso horário.
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Card Defaults do Disparador */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-100">
-                  <Send className="h-5 w-5 text-orange-600" />
-                </div>
-                <div>
-                  <CardTitle>Configurações Padrão do Disparador</CardTitle>
-                  <CardDescription>
-                    Valores padrão usados ao criar novas campanhas. Cada campanha pode ter valores próprios.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              
-              {/* Intervalo entre mensagens */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <Timer className="h-4 w-4 text-slate-500" />
-                    Intervalo entre mensagens
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p>Tempo aleatório entre cada envio. Intervalos maiores reduzem o risco de bloqueio.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                  <Badge variant="outline" className="font-mono">
-                    {dispIntervalMin}s - {dispIntervalMax}s
-                  </Badge>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Mínimo (seg)</Label>
-                    <Input 
-                      type="number" 
-                      value={dispIntervalMin} 
-                      onChange={(e) => setDispIntervalMin(Math.max(30, Number(e.target.value)))}
-                      min={30}
-                      className="font-mono"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Mínimo recomendado: 30s</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Máximo (seg)</Label>
-                    <Input 
-                      type="number" 
-                      value={dispIntervalMax} 
-                      onChange={(e) => setDispIntervalMax(Math.max(dispIntervalMin + 10, Number(e.target.value)))}
-                      min={dispIntervalMin + 10}
-                      className="font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Horário de operação */}
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4 text-slate-500" />
-                  Horário de operação padrão
-                </Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Início</Label>
-                    <Input 
-                      type="time" 
-                      value={dispStartTime} 
-                      onChange={(e) => setDispStartTime(e.target.value)}
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Término</Label>
-                    <Input 
-                      type="time" 
-                      value={dispEndTime} 
-                      onChange={(e) => setDispEndTime(e.target.value)}
-                      className="font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Limite diário */}
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-slate-500" />
-                  Limite diário padrão de envios
-                </Label>
-                <Select value={String(dispDailyLimit)} onValueChange={(v) => setDispDailyLimit(Number(v))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="50">
-                      <div className="flex items-center gap-2">
-                        <span>50 mensagens</span>
-                        <Badge className="bg-green-100 text-green-700 text-[10px]">Muito Seguro</Badge>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="100">
-                      <div className="flex items-center gap-2">
-                        <span>100 mensagens</span>
-                        <Badge className="bg-green-100 text-green-700 text-[10px]">Seguro</Badge>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="200">
-                      <div className="flex items-center gap-2">
-                        <span>200 mensagens</span>
-                        <Badge className="bg-green-100 text-green-700 text-[10px]">Recomendado</Badge>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="300">
-                      <div className="flex items-center gap-2">
-                        <span>300 mensagens</span>
-                        <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">Moderado</Badge>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="500">
-                      <div className="flex items-center gap-2">
-                        <span>500 mensagens</span>
-                        <Badge className="bg-orange-100 text-orange-700 text-[10px]">Alto Volume</Badge>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Estimativa */}
-              <Card className="bg-slate-50 border-slate-200">
-                <CardContent className="pt-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-slate-200 rounded-lg">
-                      <Info className="h-4 w-4 text-slate-600" />
-                    </div>
-                    <div className="space-y-1 text-sm">
-                      <p className="font-medium text-slate-700">Estimativa de Capacidade</p>
-                      <p className="text-slate-600">
-                        ~<strong>{messagesPerHour}</strong> msg/hora • 
-                        ~<strong>{Math.round(estimatedDailyCapacity)}</strong> msg/dia
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Operando {hoursPerDay.toFixed(1)}h/dia
-                      </p>
-                      <Badge className={`mt-1 ${getRiskLevel(dispDailyLimit).color}`}>
-                        {getRiskLevel(dispDailyLimit).label}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </CardContent>
-          </Card>
 
           {/* Card Remarketing */}
           <Card className={`transition-colors ${rmktEnabled ? 'border-purple-200' : ''}`}>
@@ -1046,17 +802,17 @@ export default function Settings() {
           {/* Botão Salvar */}
           <div className="flex justify-end">
             <Button 
-              onClick={handleSaveDispatcher} 
-              disabled={isSavingDispatcher}
-              className="gap-2 bg-[#F59600] hover:bg-[#e08900] text-white min-w-[200px]"
+              onClick={handleSaveRemarketing} 
+              disabled={isSavingRemarketing}
+              className="gap-2 bg-purple-600 hover:bg-purple-700 text-white min-w-[200px]"
               size="lg"
             >
-              {isSavingDispatcher ? (
+              {isSavingRemarketing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              Salvar Configurações
+              Salvar Remarketing
             </Button>
           </div>
         </TabsContent>

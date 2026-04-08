@@ -95,17 +95,4 @@
   body {
     @apply bg-background text-foreground;
   }
-  
-  /* Garantir que botões primários sempre usem o laranja */
-  .bg-primary {
-    background-color: hsl(40 100% 50%) !important;
-  }
-  
-  .text-primary {
-    color: hsl(40 100% 50%) !important;
-  }
-  
-  .border-primary {
-    border-color: hsl(40 100% 50%) !important;
-  }
 }

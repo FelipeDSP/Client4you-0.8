@@ -34,7 +34,7 @@ export function QuotaLimitModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto bg-slate-50">
         <DialogHeader className="pt-4">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-200">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary shadow-lg shadow-primary/20">
             <Rocket className="h-8 w-8 text-white" />
           </div>
           <DialogTitle className="text-center text-3xl font-bold text-slate-900">
@@ -114,8 +114,8 @@ export function QuotaLimitModal({
           </Card>
 
           {/* PLANO INTERMEDIÁRIO - MAIS POPULAR */}
-          <Card className="relative overflow-hidden border-2 border-orange-500 shadow-2xl scale-105 z-10 bg-white">
-            <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-2 text-xs font-bold uppercase tracking-wider text-center shadow-sm">
+          <Card className="relative overflow-hidden border-2 border-primary shadow-2xl scale-105 z-10 bg-white">
+            <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-4 py-2 text-xs font-bold uppercase tracking-wider text-center shadow-sm">
               ⭐ Mais Popular
             </div>
             
@@ -123,7 +123,7 @@ export function QuotaLimitModal({
               {/* Header */}
               <div className="text-center space-y-2">
                 <div className="flex items-center justify-center gap-2">
-                  <div className="p-2 rounded-lg bg-orange-50 text-orange-600">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
                     <Rocket className="h-6 w-6" />
                   </div>
                   <h3 className="text-xl font-bold text-slate-900">Intermediário</h3>
@@ -171,7 +171,7 @@ export function QuotaLimitModal({
 
               {/* CTA */}
               <Button 
-                className="w-full h-11 font-bold bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-md shadow-orange-200 transition-all hover:scale-[1.02]"
+                className="w-full h-11 font-bold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground shadow-md shadow-primary/20 transition-all hover:scale-[1.02]"
                 onClick={() => handleUpgrade(KIWIFY_INTERMEDIARIO_URL)}
               >
                 Assinar Intermediário

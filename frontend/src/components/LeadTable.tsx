@@ -66,9 +66,6 @@ export function LeadTable({
   };
 
   // Cores da Marca
-  const BRAND_BLUE = "bg-[#054173]";
-  const BRAND_ORANGE_TEXT = "text-[#F59600]";
-
   if (isLoading) {
     return (
       <div className="p-12 text-center space-y-4">
@@ -96,13 +93,13 @@ export function LeadTable({
     <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm bg-white">
       <Table>
         {/* Cabeçalho com a cor da marca */}
-        <TableHeader className={BRAND_BLUE}>
-          <TableRow className="hover:bg-[#054173]/90 border-none">
+        <TableHeader className="bg-blue-900">
+          <TableRow className="hover:bg-blue-900/90 border-none">
             <TableHead className="w-[40px] pl-4">
               <Checkbox 
                 checked={leads.length > 0 && selectedLeads.length === leads.length}
                 onCheckedChange={toggleSelectAll}
-                className="border-white/50 data-[state=checked]:bg-[#F59600] data-[state=checked]:border-[#F59600] data-[state=checked]:text-white"
+                className="border-white/50 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
               />
             </TableHead>
             <TableHead className="min-w-[200px] font-semibold text-white/90">Empresa</TableHead>
@@ -125,7 +122,7 @@ export function LeadTable({
                 <Checkbox 
                   checked={selectedLeads.includes(lead.id)}
                   onCheckedChange={() => toggleSelectOne(lead.id)}
-                  className="border-slate-300 data-[state=checked]:bg-[#F59600] data-[state=checked]:border-[#F59600]"
+                  className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 />
               </TableCell>
 

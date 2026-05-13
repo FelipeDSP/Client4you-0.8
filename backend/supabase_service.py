@@ -415,72 +415,136 @@ class SupabaseService:
             logger.error(f"Error creating notification: {e}")
             return None
     
-    # ========== Quotas ==========
+    # ========== Quotas / Subscriptions ==========
     async def get_user_quota(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user quota"""
+        """
+        Retorna apenas o registro de user_quotas (contadores: leads_used,
+        campaigns_used, messages_sent, reset_date). Para shape combinada com
+        plano, use get_user_quota_with_plan.
+        """
         try:
             result = self.client.table('user_quotas')\
                 .select('*')\
                 .eq('user_id', user_id)\
-                .single()\
+                .maybe_single()\
                 .execute()
             return result.data
         except Exception as e:
             logger.error(f"Error getting user quota: {e}")
             return None
+
+    async def get_company_subscription(self, company_id: str) -> Optional[Dict[str, Any]]:
+        """Retorna a subscription da empresa (plan_id, status, period)."""
+        try:
+            result = self.client.table('subscriptions')\
+                .select('*')\
+                .eq('company_id', company_id)\
+                .maybe_single()\
+                .execute()
+            return result.data
+        except Exception as e:
+            logger.error(f"Error getting company subscription: {e}")
+            return None
+
+    async def get_user_quota_with_plan(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retorna user_quota (contadores) combinado com a subscription da empresa
+        e os limites do plano (de plans.PLAN_LIMITS). Shape mantida compatível
+        com o que o frontend espera (plan_type, leads_limit, plan_expires_at).
+        """
+        from plans import get_plan_limits
+
+        quota = await self.get_user_quota(user_id)
+        if not quota:
+            return None
+
+        company_id = quota.get('company_id')
+        subscription = None
+        if company_id:
+            subscription = await self.get_company_subscription(company_id)
+
+        plan_id = (subscription.get('plan_id') if subscription else None) or 'demo'
+        status = (subscription.get('status') if subscription else None) or 'expired'
+        period_end = subscription.get('current_period_end') if subscription else None
+
+        limits = get_plan_limits(plan_id, status)
+
+        return {
+            **quota,
+            'plan_type': plan_id,
+            'plan_name': limits['name'],
+            'leads_limit': limits['leads_limit'],
+            'campaigns_limit': limits['campaigns_limit'],
+            'messages_limit': limits['messages_limit'],
+            'plan_expires_at': period_end,
+            'subscription_status': status,
+        }
     
     async def check_quota(self, user_id: str, action: str) -> Dict[str, Any]:
-        """Check if user can perform action based on quota limits"""
+        """
+        Check if user can perform action.
+        Combina contadores (user_quotas) + plano (subscriptions) + limites (PLAN_LIMITS).
+        """
         try:
-            # Buscar quota do usuário diretamente (evita problema de função RPC duplicada)
-            quota = await self.get_user_quota(user_id)
-            
-            if not quota:
+            full_quota = await self.get_user_quota_with_plan(user_id)
+
+            if not full_quota:
                 return {'allowed': False, 'reason': 'Quota não encontrada'}
-            
-            # Mapear ação para campo de limite e uso
+
+            # Subscription suspended/cancelled/expired bloqueia tudo
+            sub_status = full_quota.get('subscription_status')
+            if sub_status in ('suspended', 'cancelled', 'expired'):
+                return {'allowed': False, 'reason': f'Conta {sub_status}'}
+
+            # Mapear ação → (campo de limite, campo de uso).
+            # Aceita aliases do frontend (lead_search, campaign_send, message_send).
             action_map = {
                 'create_campaign': ('campaigns_limit', 'campaigns_used'),
-                'send_message': ('messages_limit', 'messages_used'),
-                'search_leads': ('leads_limit', 'leads_used'),
-                'start_campaign': ('campaigns_limit', 'campaigns_used'),
+                'send_message':    ('messages_limit',  'messages_sent'),
+                'search_leads':    ('leads_limit',     'leads_used'),
+                'start_campaign':  ('campaigns_limit', 'campaigns_used'),
+                'lead_search':     ('leads_limit',     'leads_used'),
+                'campaign_send':   ('campaigns_limit', 'campaigns_used'),
+                'message_send':    ('messages_limit',  'messages_sent'),
             }
-            
+
             if action not in action_map:
-                # Ação não mapeada - permitir por padrão
                 return {'allowed': True, 'reason': 'OK'}
-            
+
             limit_field, used_field = action_map[action]
-            limit = quota.get(limit_field, 0)
-            used = quota.get(used_field, 0)
-            
-            # -1 significa ilimitado
+            limit = full_quota.get(limit_field, 0) or 0
+            used = full_quota.get(used_field, 0) or 0
+
             if limit == -1:
-                return {'allowed': True, 'reason': 'Ilimitado'}
-            
-            # 0 significa bloqueado
+                return {'allowed': True, 'reason': 'Ilimitado', 'limit': -1, 'used': used, 'unlimited': True}
+
             if limit == 0:
-                return {'allowed': False, 'reason': f'Recurso não disponível no seu plano'}
-            
-            # Verificar se ainda tem quota
+                return {'allowed': False, 'reason': 'Recurso não disponível no seu plano', 'limit': 0, 'used': used}
+
             if used >= limit:
-                return {'allowed': False, 'reason': f'Limite atingido ({used}/{limit})'}
-            
-            return {'allowed': True, 'reason': f'OK ({used}/{limit})'}
-            
+                return {'allowed': False, 'reason': f'Limite atingido ({used}/{limit})', 'limit': limit, 'used': used}
+
+            return {'allowed': True, 'reason': f'OK ({used}/{limit})', 'limit': limit, 'used': used}
+
         except Exception as e:
             logger.error(f"Error checking quota: {e}")
             # Em caso de erro, permitir para não bloquear o usuário
             return {'allowed': True, 'reason': 'Erro na verificação (permitido por padrão)'}
     
     async def increment_quota(self, user_id: str, action: str, amount: int = 1) -> bool:
-        """Increment quota usage atomically via RPC to prevent race conditions"""
+        """
+        Increment quota usage atomically via RPC (com fallback read-then-write).
+        Atenção: campo de mensagens é `messages_sent`, não `messages_used`.
+        """
         try:
             action_map = {
                 'create_campaign': 'campaigns_used',
-                'send_message': 'messages_used',
-                'search_leads': 'leads_used',
-                'start_campaign': 'campaigns_used',
+                'send_message':    'messages_sent',
+                'search_leads':    'leads_used',
+                'start_campaign':  'campaigns_used',
+                'lead_search':     'leads_used',
+                'campaign_send':   'campaigns_used',
+                'message_send':    'messages_sent',
             }
 
             used_field = action_map.get(action)
@@ -514,14 +578,35 @@ class SupabaseService:
             logger.error(f"Error incrementing quota: {e}")
             return False
     
-    async def upgrade_plan(self, user_id: str, plan_type: str, plan_name: str) -> bool:
-        """Upgrade user plan"""
+    async def upgrade_plan(self, user_id: str, plan_type: str, plan_name: str = None) -> bool:
+        """
+        Upgrade do plano da empresa do usuário (UPSERT em subscriptions).
+        O parâmetro plan_name é aceito mas ignorado (nome vem de plans.PLAN_LIMITS).
+        """
         try:
-            self.client.rpc('upgrade_user_plan', {
-                'p_user_id': user_id,
-                'p_plan_type': plan_type,
-                'p_plan_name': plan_name
-            }).execute()
+            from datetime import timedelta
+            # Resolve company_id do usuário
+            profile = self.client.table('profiles')\
+                .select('company_id')\
+                .eq('id', user_id)\
+                .maybe_single()\
+                .execute()
+            if not profile.data or not profile.data.get('company_id'):
+                logger.error(f"Usuário {user_id} sem company_id — upgrade_plan abortado")
+                return False
+            company_id = profile.data['company_id']
+
+            now = datetime.now(timezone.utc)
+            valid_until = (now + timedelta(days=30)).isoformat()
+
+            self.client.table('subscriptions').upsert({
+                'company_id': company_id,
+                'plan_id': plan_type,
+                'status': 'active',
+                'current_period_start': now.isoformat(),
+                'current_period_end': valid_until,
+                'updated_at': now.isoformat(),
+            }, on_conflict='company_id').execute()
             return True
         except Exception as e:
             logger.error(f"Error upgrading plan: {e}")

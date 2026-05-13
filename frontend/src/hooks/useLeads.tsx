@@ -24,9 +24,13 @@ export function useLeads() {
     queryFn: async () => {
       if (!user?.companyId) return [];
       
+      // Defense-in-depth: filtra explicitamente por company_id em vez de
+      // depender apenas do RLS do Supabase. Se a policy falhar, ainda
+      // assim nenhum dado de outra empresa é retornado.
       const { data, error } = await supabase
         .from("leads")
         .select("*")
+        .eq("company_id", user.companyId)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -55,7 +59,7 @@ export function useLeads() {
     },
     enabled: !!user?.companyId,
     // CRÍTICO: Não refetch automaticamente. Só atualiza se forçarmos ou na busca.
-    staleTime: Infinity, 
+    staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
@@ -65,9 +69,11 @@ export function useLeads() {
     queryFn: async () => {
       if (!user?.companyId) return [];
       
+      // Defense-in-depth: filtra explicitamente por company_id.
       const { data, error } = await supabase
         .from("search_history")
         .select("*")
+        .eq("company_id", user.companyId)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -123,11 +129,14 @@ export function useLeads() {
 
       if (error || data?.error) throw error || new Error(data?.error);
 
-      // 3. Buscar APENAS os novos leads criados (economiza banda)
+      // 3. Buscar APENAS os novos leads criados (economiza banda).
+      // Defense-in-depth: search_id já restringe, mas adiciona company_id
+      // explicitamente para o caso de search_ids colidirem entre empresas.
       const { data: newLeadsData, error: newLeadsError } = await supabase
         .from("leads")
         .select("*")
         .eq("search_id", searchId)
+        .eq("company_id", user.companyId)
         .order("created_at", { ascending: false })
         .limit(data?.count || 20);
 
@@ -214,7 +223,13 @@ export function useLeads() {
   // --- 6. Outras Actions (Delete, Clear) ---
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("leads").delete().eq("id", id);
+      if (!user?.companyId) throw new Error("Sem empresa associada");
+      // Defense-in-depth: garante que o lead pertence à empresa do usuário.
+      const { error } = await supabase
+        .from("leads")
+        .delete()
+        .eq("id", id)
+        .eq("company_id", user.companyId);
       if (error) throw error;
       return id;
     },
@@ -236,9 +251,19 @@ export function useLeads() {
 
   const deleteSearchHistoryMutation = useMutation({
     mutationFn: async (searchId: string) => {
-      // Deleta leads e histórico
-      await supabase.from("leads").delete().eq("search_id", searchId);
-      await supabase.from("search_history").delete().eq("id", searchId);
+      if (!user?.companyId) throw new Error("Sem empresa associada");
+      // Defense-in-depth: filtra por company_id em ambos os deletes para
+      // que um search_id forjado de outra empresa não delete dados alheios.
+      await supabase
+        .from("leads")
+        .delete()
+        .eq("search_id", searchId)
+        .eq("company_id", user.companyId);
+      await supabase
+        .from("search_history")
+        .delete()
+        .eq("id", searchId)
+        .eq("company_id", user.companyId);
       return searchId;
     },
     onSuccess: (searchId) => {

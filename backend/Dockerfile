@@ -18,6 +18,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código fonte
 COPY . .
 
+# Criar usuário não-root e diretório de uploads com permissões corretas.
+# O volume `backend-uploads` no docker-compose monta em /app/uploads, então
+# o diretório precisa existir e ser writable por appuser antes do mount.
+RUN groupadd --system --gid 1001 appuser \
+  && useradd --system --uid 1001 --gid appuser --create-home appuser \
+  && mkdir -p /app/uploads \
+  && chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 80
 
 # Healthcheck para Coolify

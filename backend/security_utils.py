@@ -7,6 +7,7 @@ import ipaddress
 import re
 import html
 import time
+import hashlib
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 from fastapi import HTTPException, Request, Depends
@@ -18,6 +19,12 @@ logger = logging.getLogger(__name__)
 # Cache para tokens validados (token_hash -> (user_data, expiry_time))
 _token_cache: Dict[str, tuple[dict, float]] = {}
 TOKEN_CACHE_TTL = 300  # 5 minutos
+
+# Modo de execução. Em 'production', qualquer falha de validação de JWT
+# (JWKS indisponível, JWT_SECRET ausente) faz a auth FALHAR FECHADO em vez
+# de aceitar tokens sem verificação de assinatura.
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development').lower()
+IS_PRODUCTION = ENVIRONMENT == 'production'
 
 # ========== AUTHENTICATION ==========
 
@@ -43,8 +50,11 @@ async def get_authenticated_user(request: Request) -> dict:
     # Obter X-Session-Token do header (para verificação de sessão única)
     client_session_token = request.headers.get("X-Session-Token")
     
-    # Verificar cache primeiro
-    token_hash = hash(token)
+    # Verificar cache primeiro.
+    # Usamos sha256 (não o built-in hash()) porque hash() é não-determinístico
+    # entre processos Python (PYTHONHASHSEED) — workers diferentes do Uvicorn
+    # nunca compartilhariam cache, e o espaço de colisão de hash() é menor.
+    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
     current_time = time.time()
     
     if token_hash in _token_cache:
@@ -113,7 +123,7 @@ async def get_authenticated_user(request: Request) -> dict:
                 # Algoritmos assimétricos (ES256, RS256) - buscar JWKS do Supabase
                 try:
                     jwks_url = f"{supabase_url}/auth/v1/.well-known/jwks.json"
-                    
+
                     # Cache simples da JWKS (em produção, usar cache real)
                     with httpx.Client(timeout=10) as client:
                         resp = client.get(jwks_url)
@@ -121,7 +131,7 @@ async def get_authenticated_user(request: Request) -> dict:
                             from jwt import PyJWKClient
                             jwks_client = PyJWKClient(jwks_url)
                             signing_key = jwks_client.get_signing_key_from_jwt(token)
-                            
+
                             decoded = pyjwt.decode(
                                 token,
                                 signing_key.key,
@@ -131,15 +141,23 @@ async def get_authenticated_user(request: Request) -> dict:
                             )
                             logger.debug(f"Token validado via JWKS com {alg}")
                         else:
-                            logger.warning(f"Não foi possível obter JWKS: {resp.status_code}")
-                            # Fallback: decodificar sem verificação
-                            decoded = pyjwt.decode(token, options={"verify_signature": False})
-                            logger.warning("Usando fallback sem verificação de assinatura")
+                            raise RuntimeError(f"JWKS endpoint returned HTTP {resp.status_code}")
+                except HTTPException:
+                    raise
                 except Exception as e:
-                    logger.warning(f"Erro ao validar com JWKS: {e}")
-                    # Fallback: decodificar sem verificação
+                    logger.error(f"JWKS validation failed: {e}")
+                    if IS_PRODUCTION:
+                        # Em produção, FALHAR FECHADO: nunca aceitar um token sem
+                        # verificar a assinatura, ainda que o JWKS esteja temporariamente
+                        # indisponível. 503 sinaliza ao cliente que é falha transitória.
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Serviço de autenticação temporariamente indisponível"
+                        )
+                    # DEV-ONLY: aceitar token sem verificação só para destravar
+                    # desenvolvimento local. NUNCA em produção.
+                    logger.warning("DEV-ONLY: token aceito sem verificação de assinatura (NUNCA em produção)")
                     decoded = pyjwt.decode(token, options={"verify_signature": False})
-                    logger.warning("Usando fallback sem verificação de assinatura")
                     
             elif jwt_secret:
                 # Algoritmos simétricos (HS256) - usar JWT secret
@@ -190,8 +208,18 @@ async def get_authenticated_user(request: Request) -> dict:
                     logger.warning(f"Token inválido: {e}")
                     raise HTTPException(status_code=401, detail="Token inválido")
             else:
-                # Fallback se JWT_SECRET não configurado (apenas desenvolvimento)
-                logger.warning("SUPABASE_JWT_SECRET não configurado - verificação de assinatura desabilitada")
+                # SUPABASE_JWT_SECRET não configurado
+                logger.error("SUPABASE_JWT_SECRET ausente")
+                if IS_PRODUCTION:
+                    # Em produção, FALHAR FECHADO: a aplicação não deve aceitar
+                    # tokens sem ter a chave para verificar a assinatura.
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Serviço de autenticação não configurado corretamente"
+                    )
+                # DEV-ONLY: aceitar token sem verificação só para destravar
+                # desenvolvimento local. NUNCA em produção.
+                logger.warning("DEV-ONLY: SUPABASE_JWT_SECRET ausente — token aceito sem verificação (NUNCA em produção)")
                 decoded = pyjwt.decode(token, options={"verify_signature": False})
             
             user_id = decoded.get("sub")
@@ -588,30 +616,36 @@ async def validate_quota_for_action(
         from supabase_service import get_supabase_service
         db = get_supabase_service()
     
-    # Buscar quota do usuário
-    quota = await db.get_user_quota(user_id)
+    # Buscar quota combinada (contadores + plano da subscription)
+    quota = await db.get_user_quota_with_plan(user_id)
     if not quota:
         raise HTTPException(
             status_code=403,
             detail="Quota não encontrada. Entre em contato com o suporte."
         )
-    
+
+    # VERIFICAR STATUS DA SUBSCRIPTION (suspended/cancelled bloqueia)
+    sub_status = quota.get("subscription_status")
+    if sub_status in ("suspended", "cancelled"):
+        raise HTTPException(
+            status_code=402,
+            detail=f"Sua assinatura está {sub_status}. Renove para continuar usando a plataforma."
+        )
+
     # VERIFICAR SE O PLANO EXPIROU
     plan_expires_at = quota.get("plan_expires_at")
     if plan_expires_at:
         try:
-            # Parse da data de expiração
             if isinstance(plan_expires_at, str):
-                # Remover timezone info se presente para simplificar
                 expiration_str = plan_expires_at.replace('Z', '+00:00')
-                if '+' in expiration_str:
-                    expiration_str = expiration_str.split('+')[0]
                 expiration_date = datetime.fromisoformat(expiration_str)
+                if expiration_date.tzinfo is None:
+                    expiration_date = expiration_date.replace(tzinfo=timezone.utc)
             else:
                 expiration_date = plan_expires_at
-            
+
             now = datetime.now(timezone.utc)
-            
+
             if expiration_date < now:
                 logger.warning(f"Plano expirado para usuário {user_id}. Expirou em: {plan_expires_at}")
                 raise HTTPException(
@@ -622,20 +656,14 @@ async def validate_quota_for_action(
             raise
         except Exception as e:
             logger.warning(f"Erro ao verificar expiração do plano: {e}")
-            # Em caso de erro de parse, não bloqueia
-    
-    # Verificar plano se necessário
+
+    # Verificar plano (lista de planos permitidos)
     if required_plan:
-        # Compatível com plan_type OU plan_name (campos diferentes nas migrations)
-        user_plan = quota.get("plan_type", quota.get("plan_name", quota.get("plan", "sem_plano")))
-        # Normalizar para comparação (basico, intermediario, avancado)
-        user_plan_normalized = user_plan.lower() if user_plan else "sem_plano"
-        
-        # Converter required_plan para lowercase para comparação
+        user_plan = quota.get("plan_type") or "demo"
+        user_plan_normalized = user_plan.lower()
         required_plan_lower = [p.lower() for p in required_plan]
-        
+
         if user_plan_normalized not in required_plan_lower:
-            # Mapear nomes amigáveis para exibição
             plan_display_names = {
                 'demo': 'Demo',
                 'basico': 'Básico',
@@ -649,8 +677,8 @@ async def validate_quota_for_action(
                 detail=f"Esta funcionalidade está disponível apenas para os planos: {required_display}. "
                        f"Seu plano atual: {user_plan_display}. Faça upgrade para acessar."
             )
-    
-    # Verificar limite de uso
+
+    # Verificar limite de uso (check_quota já considera subscription_status)
     quota_check = await db.check_quota(user_id, action)
     if not quota_check.get("allowed", False):
         reason = quota_check.get("reason", "Limite atingido")

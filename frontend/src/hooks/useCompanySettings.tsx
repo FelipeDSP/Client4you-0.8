@@ -22,24 +22,11 @@ export interface CompanySettings {
   remarketingIntervalMin: number;
   remarketingIntervalMax: number;
   remarketingMessage: string;
-  // Agente IA
-  agentEnabled: boolean;
-  agentName: string;
-  agentTone: 'formal' | 'casual' | 'professional' | 'friendly';
-  agentPersonality: string;
-  agentSystemPrompt: string;
-  agentWelcomeMessage: string;
-  agentResponseDelay: number;
-  agentMaxResponseLength: number;
-  agentWorkingHoursEnabled: boolean;
-  agentWorkingHoursStart: string;
-  agentWorkingHoursEnd: string;
-  agentAutoQualify: boolean;
-  agentQualificationQuestions: string[];
-  agentBlockedTopics: string[];
   // Timestamps
   createdAt: string;
   updatedAt: string;
+  // OBS: campos do Agente IA foram movidos para a tabela agent_configs.
+  // Use o hook `useAgentConfig` em vez deste.
 }
 
 
@@ -80,21 +67,6 @@ function mapSettingsData(raw: Record<string, unknown>, companyId: string, timezo
     remarketingIntervalMin: (raw.remarketing_interval_min as number) ?? COMPANY_SETTINGS_DEFAULTS.remarketingIntervalMin!,
     remarketingIntervalMax: (raw.remarketing_interval_max as number) ?? COMPANY_SETTINGS_DEFAULTS.remarketingIntervalMax!,
     remarketingMessage: (raw.remarketing_message as string) || COMPANY_SETTINGS_DEFAULTS.remarketingMessage!,
-    // Agente IA
-    agentEnabled: (raw.agent_enabled as boolean) ?? COMPANY_SETTINGS_DEFAULTS.agentEnabled!,
-    agentName: (raw.agent_name as string) || COMPANY_SETTINGS_DEFAULTS.agentName!,
-    agentTone: ((raw.agent_tone as string) || COMPANY_SETTINGS_DEFAULTS.agentTone!) as CompanySettings['agentTone'],
-    agentPersonality: (raw.agent_personality as string) || COMPANY_SETTINGS_DEFAULTS.agentPersonality!,
-    agentSystemPrompt: (raw.agent_system_prompt as string) || COMPANY_SETTINGS_DEFAULTS.agentSystemPrompt!,
-    agentWelcomeMessage: (raw.agent_welcome_message as string) || COMPANY_SETTINGS_DEFAULTS.agentWelcomeMessage!,
-    agentResponseDelay: (raw.agent_response_delay as number) ?? COMPANY_SETTINGS_DEFAULTS.agentResponseDelay!,
-    agentMaxResponseLength: (raw.agent_max_response_length as number) ?? COMPANY_SETTINGS_DEFAULTS.agentMaxResponseLength!,
-    agentWorkingHoursEnabled: (raw.agent_working_hours_enabled as boolean) ?? COMPANY_SETTINGS_DEFAULTS.agentWorkingHoursEnabled!,
-    agentWorkingHoursStart: (raw.agent_working_hours_start as string) || COMPANY_SETTINGS_DEFAULTS.agentWorkingHoursStart!,
-    agentWorkingHoursEnd: (raw.agent_working_hours_end as string) || COMPANY_SETTINGS_DEFAULTS.agentWorkingHoursEnd!,
-    agentAutoQualify: (raw.agent_auto_qualify as boolean) ?? COMPANY_SETTINGS_DEFAULTS.agentAutoQualify!,
-    agentQualificationQuestions: (raw.agent_qualification_questions as string[]) || COMPANY_SETTINGS_DEFAULTS.agentQualificationQuestions!,
-    agentBlockedTopics: (raw.agent_blocked_topics as string[]) || COMPANY_SETTINGS_DEFAULTS.agentBlockedTopics!,
     // Timestamps
     createdAt: (raw.created_at as string) || new Date().toISOString(),
     updatedAt: (raw.updated_at as string) || new Date().toISOString(),

@@ -165,7 +165,7 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <MainLayout>
-            <History />
+            <SearchLeads />
           </MainLayout>
         </ProtectedRoute>
       }

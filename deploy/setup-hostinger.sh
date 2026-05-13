@@ -21,9 +21,17 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# SECRETS devem ser passados como env vars antes de executar este script:
+#   SUPABASE_URL=https://xxx.supabase.co SUPABASE_KEY=eyJ... sudo ./setup-hostinger.sh
+# Ver backend/.env.example para a lista completa de vars necessárias.
+if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_KEY:-}" ]; then
+    echo -e "${RED}ERRO: SUPABASE_URL e SUPABASE_KEY devem ser env vars antes de executar.${NC}"
+    echo -e "${YELLOW}Exemplo: SUPABASE_URL=https://xxx.supabase.co SUPABASE_KEY=eyJ... sudo ./setup-hostinger.sh${NC}"
+    exit 1
+fi
 cat > .env << EOF
-SUPABASE_URL="https://owlignktsqlrqaqhzujb.supabase.co"
-SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93bGlnbmt0c3FscnFhcWh6dWpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgzMjUzMzAsImV4cCI6MjA4MzkwMTMzMH0.B9UhTYi8slAx2UWsSckys55O9VQHdkYIHyqhSeFy8Z0"
+SUPABASE_URL="${SUPABASE_URL}"
+SUPABASE_KEY="${SUPABASE_KEY}"
 CORS_ORIGINS="http://${IP_VPS},http://${IP_VPS}:80"
 EOF
 

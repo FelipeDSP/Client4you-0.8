@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from security_utils import get_authenticated_user, require_role, handle_error
 from supabase_service import get_supabase_service
 from audit_service import get_audit_service
+from plans import PLAN_LIMITS, get_plan_limits
 
 logger = logging.getLogger(__name__)
 
@@ -69,18 +70,21 @@ async def suspend_user_account(
             raise HTTPException(status_code=404, detail="Usuário não encontrado")
         
         target_email = profile.data.get('email')
-        
-        # Suspender conta (usando plan_type='suspended' como marcador)
 
-        db.client.table('user_quotas').upsert({
-            'user_id': user_id,
-            'plan_type': 'suspended',
-            'plan_name': 'Conta Suspensa',
-            'leads_limit': 0,
-            'campaigns_limit': 0,
-            'messages_limit': 0,
-            'updated_at': datetime.now().isoformat()
-        }, on_conflict='user_id').execute()
+        # Suspende a subscription da empresa do usuário (status='suspended')
+        company_id = db.client.table('profiles')\
+            .select('company_id')\
+            .eq('id', user_id)\
+            .maybe_single()\
+            .execute().data.get('company_id')
+        if company_id:
+            db.client.table('subscriptions')\
+                .update({
+                    'status': 'suspended',
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
+                })\
+                .eq('company_id', company_id)\
+                .execute()
         
         # Log de auditoria
         await audit.log_action(
@@ -139,40 +143,40 @@ async def activate_user_account(
         
         target_email = profile.data.get('email')
         company_id = profile.data.get('company_id')
-        
-        # Validar plano
-        valid_plans = ['basico', 'intermediario', 'avancado']
+
+        if not company_id:
+            raise HTTPException(status_code=400, detail="Usuário sem company_id — não dá pra ativar")
+
+        # Validar plano contra PLAN_LIMITS canônico
+        valid_plans = ['demo', 'basico', 'intermediario', 'avancado']
         plan_type = activate_data.plan_type.lower()
         if plan_type not in valid_plans:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Plano inválido. Use: {', '.join(valid_plans)}"
             )
-        
-        # Configurar limites por plano
-        plan_configs = {
-            'basico': {'leads_limit': -1, 'campaigns_limit': 0, 'messages_limit': 0},
-            'intermediario': {'leads_limit': -1, 'campaigns_limit': -1, 'messages_limit': -1},
-            'avancado': {'leads_limit': -1, 'campaigns_limit': -1, 'messages_limit': -1},
-        }
-        
 
-        expires_at = (datetime.now() + timedelta(days=activate_data.days_valid)).isoformat()
-        
-        # Ativar conta (usando apenas colunas existentes na tabela user_quotas)
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(days=activate_data.days_valid)).isoformat()
+
+        # Subscription (plano por company)
+        db.client.table('subscriptions').upsert({
+            'company_id': company_id,
+            'plan_id': plan_type,
+            'status': 'active',
+            'current_period_start': now.isoformat(),
+            'current_period_end': expires_at,
+            'updated_at': now.isoformat(),
+        }, on_conflict='company_id').execute()
+
+        # user_quotas (apenas contadores zerados)
         db.client.table('user_quotas').upsert({
             'user_id': user_id,
             'company_id': company_id,
-            'plan_type': plan_type,
-            'plan_name': activate_data.plan_name,
-            'leads_limit': plan_configs[plan_type]['leads_limit'],
-            'campaigns_limit': plan_configs[plan_type]['campaigns_limit'],
-            'messages_limit': plan_configs[plan_type]['messages_limit'],
             'leads_used': 0,
             'campaigns_used': 0,
             'messages_sent': 0,
-            'plan_expires_at': expires_at,
-            'updated_at': datetime.now().isoformat()
+            'updated_at': now.isoformat(),
         }, on_conflict='user_id').execute()
         
         # Log de auditoria
@@ -236,19 +240,24 @@ async def list_all_users(
 
         profiles_result = await asyncio.to_thread(query.order('created_at', desc=True).range(offset, offset + limit - 1).execute)
 
-        # Busca quotas de todos os perfis da página de uma vez
-        profile_ids = [p['id'] for p in (profiles_result.data or [])]
-        quotas_map: dict = {}
-        if profile_ids:
-            quotas_result = db.client.table('user_quotas')\
-                .select('user_id, plan_type, plan_name, plan_expires_at')\
-                .in_('user_id', profile_ids)\
+        # Busca subscriptions por company_id (fonte do plano agora)
+        company_ids = list({
+            p['company_id'] for p in (profiles_result.data or []) if p.get('company_id')
+        })
+        subs_map: dict = {}
+        if company_ids:
+            subs_result = db.client.table('subscriptions')\
+                .select('company_id, plan_id, status, current_period_end')\
+                .in_('company_id', company_ids)\
                 .execute()
-            quotas_map = {q['user_id']: q for q in (quotas_result.data or [])}
+            subs_map = {s['company_id']: s for s in (subs_result.data or [])}
 
         users = []
         for profile in (profiles_result.data or []):
-            quotas = quotas_map.get(profile['id'], {})
+            sub = subs_map.get(profile.get('company_id'), {})
+            plan_id = sub.get('plan_id') or 'demo'
+            sub_status = sub.get('status') or 'expired'
+            plan_name = PLAN_LIMITS.get(plan_id, {}).get('name', 'Sem Plano')
 
             roles = profile.get('user_roles') or []
             role_names = [r.get('role') for r in roles] if isinstance(roles, list) else []
@@ -262,10 +271,10 @@ async def list_all_users(
                 'company_id': profile.get('company_id'),
                 'company_name': companies.get('name') if isinstance(companies, dict) else None,
                 'roles': role_names,
-                'plan_type': quotas.get('plan_type', 'sem_plano'),
-                'plan_name': quotas.get('plan_name', 'Sem Plano'),
-                'status': 'suspended' if quotas.get('plan_type') == 'suspended' else 'active',
-                'expires_at': quotas.get('plan_expires_at'),
+                'plan_type': plan_id,
+                'plan_name': plan_name,
+                'status': sub_status,
+                'expires_at': sub.get('current_period_end'),
                 'created_at': profile['created_at']
             })
             
@@ -425,47 +434,38 @@ async def get_user_quota(
     auth_user: dict = Depends(require_role("super_admin"))
 ):
     """
-    Busca quota de um usuário específico (admin only)
-    
-    IMPORTANTE: Requer role super_admin
+    Busca quota combinada de um usuário (admin only).
+    Retorna user_quotas (contadores) + subscription da empresa + limites.
     """
     try:
         db = get_supabase_service()
-        
-        # Buscar quota do usuário usando service_role (bypassa RLS)
-        quota_result = db.client.table('user_quotas')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .single()\
-            .execute()
-        
-        if not quota_result.data:
-            # Retornar valores default se não houver quota
+        combined = await db.get_user_quota_with_plan(user_id)
+        if not combined:
             return {
                 'user_id': user_id,
-                'plan_type': 'sem_plano',
-                'plan_name': 'Sem Plano',
+                'plan_type': 'demo',
+                'plan_name': 'Demo',
                 'leads_limit': 0,
                 'campaigns_limit': 0,
                 'messages_limit': 0,
                 'leads_used': 0,
                 'campaigns_used': 0,
-                'messages_used': 0
+                'messages_sent': 0,
+                'subscription_status': 'expired',
             }
-        
+
         logger.info(f"Admin {auth_user['email']} consultou quota de {user_id}")
-        return quota_result.data
-        
+        return combined
+
     except Exception as e:
         logger.error(f"Erro ao buscar quota: {e}")
-        # Retornar valores default em caso de erro
         return {
             'user_id': user_id,
-            'plan_type': 'sem_plano',
-            'plan_name': 'Sem Plano',
+            'plan_type': 'demo',
+            'plan_name': 'Demo',
             'leads_limit': 0,
             'campaigns_limit': 0,
-            'messages_limit': 0
+            'messages_limit': 0,
         }
 
 
@@ -497,21 +497,39 @@ async def update_user_quota(
         
         company_id = profile.data.get('company_id')
         target_email = profile.data.get('email')
-        
-        # Upsert quota
+
+        if not company_id:
+            raise HTTPException(status_code=400, detail="Usuário sem company_id")
+
+        # Plano vai pra subscriptions; user_quotas mantém só contadores.
+        # Os campos leads_limit/campaigns_limit/messages_limit do request
+        # agora são IGNORADOS — limites vêm de plans.PLAN_LIMITS via plan_id.
+        now = datetime.now(timezone.utc)
+        db.client.table('subscriptions').upsert({
+            'company_id': company_id,
+            'plan_id': quota_data.plan_type,
+            'status': 'active',
+            'current_period_start': now.isoformat(),
+            'current_period_end': (now + timedelta(days=30)).isoformat(),
+            'updated_at': now.isoformat(),
+        }, on_conflict='company_id').execute()
+
+        # Garante user_quotas (contadores zerados se for novo usuário)
+        result = db.client.table('user_quotas').upsert({
+            'user_id': user_id,
+            'company_id': company_id,
+            'leads_used': 0,
+            'campaigns_used': 0,
+            'messages_sent': 0,
+            'updated_at': now.isoformat(),
+        }, on_conflict='user_id').execute()
+
         quota_dict = {
             'user_id': user_id,
             'company_id': company_id,
             'plan_type': quota_data.plan_type,
             'plan_name': quota_data.plan_name,
-            'leads_limit': quota_data.leads_limit,
-            'campaigns_limit': quota_data.campaigns_limit,
-            'messages_limit': quota_data.messages_limit
         }
-        
-        result = db.client.table('user_quotas')\
-            .upsert(quota_dict, on_conflict='user_id')\
-            .execute()
         
         # LOG DE AUDITORIA
         await audit.log_action(
@@ -1056,26 +1074,28 @@ async def create_user(
         )
         company_id = profile_result.data[0].get('company_id') if profile_result.data else None
         
-        # 4. Criar quota via backend
-        plan_limits = {
-            "basico": {"leads": -1, "campaigns": 0, "messages": 0},
-            "intermediario": {"leads": -1, "campaigns": -1, "messages": -1},
-            "avancado": {"leads": -1, "campaigns": -1, "messages": -1},
-        }
-        limits = plan_limits.get(user_data.plan_type, plan_limits["intermediario"])
-        
+        # 4. Criar subscription (plano) + user_quotas (contadores)
+        now = datetime.now(timezone.utc)
+        if company_id:
+            await asyncio.to_thread(
+                db.client.table('subscriptions').upsert({
+                    'company_id': company_id,
+                    'plan_id': user_data.plan_type,
+                    'status': 'active',
+                    'current_period_start': now.isoformat(),
+                    'current_period_end': (now + timedelta(days=30)).isoformat(),
+                    'updated_at': now.isoformat(),
+                }, on_conflict='company_id').execute
+            )
+
         await asyncio.to_thread(
             db.client.table('user_quotas').upsert({
                 'user_id': str(new_user_id),
                 'company_id': company_id,
-                'plan_type': user_data.plan_type,
-                'plan_name': user_data.plan_name,
-                'leads_limit': limits['leads'],
-                'campaigns_limit': limits['campaigns'],
-                'messages_limit': limits['messages'],
                 'leads_used': 0,
                 'campaigns_used': 0,
                 'messages_sent': 0,
+                'updated_at': now.isoformat(),
             }, on_conflict='user_id').execute
         )
         

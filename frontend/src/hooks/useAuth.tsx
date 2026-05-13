@@ -88,12 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     hasLoggedOutRef.current = false;
-    
+
+    // onAuthStateChange dispara INITIAL_SESSION imediatamente no subscribe
+    // (Supabase v2), então NÃO precisamos de um getSession() separado —
+    // ele criaria uma race com este callback, escrevendo user/isLoading duas vezes.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+      async (_event, newSession) => {
         setSession(newSession);
-        
+
         if (newSession?.user) {
+          // setTimeout(0) é necessário para evitar deadlock do Supabase v2
+          // ao fazer chamadas async DENTRO do callback de onAuthStateChange.
           setTimeout(async () => {
             const profile = await fetchUserProfile(newSession.user.id);
             setUser(profile);
@@ -105,17 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     );
-
-    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      
-      if (existingSession?.user) {
-        const profile = await fetchUserProfile(existingSession.user.id);
-        setUser(profile);
-      }
-      
-      setIsLoading(false);
-    });
 
     return () => {
       subscription.unsubscribe();

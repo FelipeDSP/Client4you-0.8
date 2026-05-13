@@ -32,6 +32,9 @@ dist/
 # Environment files
 *.env
 *.env.*
+# ...mas permite arquivos .env.example (templates sem secrets)
+!*.env.example
+!.env.example
 *token.json*
 *credentials.json*
 

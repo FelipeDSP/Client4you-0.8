@@ -21,6 +21,7 @@ load_dotenv()
 
 from supabase_service import get_supabase_service
 from email_service import get_email_service
+from plans import PLAN_NAME_MAP, PLAN_LIMITS
 
 logger = logging.getLogger(__name__)
 
@@ -30,41 +31,33 @@ webhook_router = APIRouter(prefix="/api")
 # Configuração Kiwify
 KIWIFY_WEBHOOK_SECRET = os.environ.get('KIWIFY_WEBHOOK_SECRET', '')
 
-# Mapeamento por nome do plano (como aparece no Kiwify)
-PLAN_NAME_MAP = {
-    'básico': 'basico',
-    'basico': 'basico',
-    'intermediário': 'intermediario',
-    'intermediario': 'intermediario',
-    'avançado': 'avancado',
-    'avancado': 'avancado',
+# Campos sensíveis que devem ser redacted antes de gravar payload em audit log
+_SENSITIVE_KEYS = {
+    "password", "senha", "token", "access_token", "refresh_token",
+    "secret", "api_key", "card_number", "cvv", "cpf", "rg"
 }
 
-# Configurações de limites por plano (SEM DEMO - apenas planos pagos)
-PLAN_LIMITS = {
-    'basico': {
-        'name': 'Plano Básico',
-        'leads_limit': -1,  # Ilimitado
-        'campaigns_limit': 0,  # Sem disparador
-        'messages_limit': 0,
-        'expires_days': None  # Não expira (enquanto pago)
-    },
-    'intermediario': {
-        'name': 'Plano Intermediário',
-        'leads_limit': -1,
-        'campaigns_limit': -1,  # Ilimitado
-        'messages_limit': -1,
-        'expires_days': None
-    },
-    'avancado': {
-        'name': 'Plano Avançado',
-        'leads_limit': -1,
-        'campaigns_limit': -1,
-        'messages_limit': -1,
-        'whatsapp_instances': 5,  # Múltiplas instâncias
-        'expires_days': None
-    }
-}
+
+def _sanitize_payload_for_log(payload: Any) -> Any:
+    """
+    Remove campos sensíveis (senhas, tokens) e mascara PII antes de gravar
+    em webhook_logs. Recursivo para dicts aninhados; ignora listas (caso raro).
+    """
+    if not isinstance(payload, dict):
+        return payload
+    sanitized: Dict[str, Any] = {}
+    for k, v in payload.items():
+        key_lower = str(k).lower()
+        if any(s in key_lower for s in _SENSITIVE_KEYS):
+            sanitized[k] = "***REDACTED***"
+        elif isinstance(v, dict):
+            sanitized[k] = _sanitize_payload_for_log(v)
+        else:
+            sanitized[k] = v
+    return sanitized
+
+# PLAN_NAME_MAP e PLAN_LIMITS agora vivem em backend/plans.py (single source).
+# Eles são importados acima e usados aqui sem redefinir.
 
 class KiwifyWebhookPayload(BaseModel):
     """Estrutura do webhook Kiwify"""
@@ -162,74 +155,108 @@ async def create_new_user(email: str, name: str) -> Dict:
         raise e
 
 
-async def upgrade_user_to_plan(user_id: str, plan: str, subscription_id: str, order_id: str):
-    """
-    Upgrade do plano do usuário (Usando UPSERT para garantir criação)
-    """
+async def _get_company_id_for_user(user_id: str) -> Optional[str]:
+    """Busca o company_id do usuário a partir do profile."""
     try:
         db = get_supabase_service()
-        
-        # Calcular data de expiração (30 dias para planos pagos)
-        valid_until = (datetime.now() + timedelta(days=30)).isoformat()
-        
-        # Buscar configuração do plano
+        result = db.client.table('profiles')\
+            .select('company_id')\
+            .eq('id', user_id)\
+            .maybe_single()\
+            .execute()
+        return result.data.get('company_id') if result.data else None
+    except Exception as e:
+        logger.error(f"Erro ao buscar company_id de {user_id}: {e}")
+        return None
+
+
+async def upgrade_user_to_plan(user_id: str, plan: str, subscription_id: str, order_id: str):
+    """
+    Upgrade do plano da EMPRESA do usuário (fonte = subscriptions).
+    Garante também que user_quotas (contador) exista zerado.
+    """
+    try:
+        from datetime import timezone
+        db = get_supabase_service()
+
+        company_id = await _get_company_id_for_user(user_id)
+        if not company_id:
+            logger.error(f"Usuário {user_id} sem company_id — upgrade abortado")
+            raise RuntimeError(f"User {user_id} has no company_id")
+
         plan_key = plan.lower()
-        plan_config = PLAN_LIMITS.get(plan_key, PLAN_LIMITS['basico'])
-        
-        # Dados para atualização/inserção
-        quota_data = {
-            'user_id': user_id,
-            'plan_type': plan_key,
-            'plan_name': plan_config['name'],
-            'leads_limit': plan_config['leads_limit'],
-            'campaigns_limit': plan_config['campaigns_limit'],
-            'messages_limit': plan_config['messages_limit'],
-            'plan_expires_at': valid_until,
-            'subscription_id': subscription_id,
-            'order_id': order_id,
-            'updated_at': datetime.now().isoformat()
+        if plan_key not in PLAN_LIMITS:
+            plan_key = 'basico'
+        plan_config = PLAN_LIMITS[plan_key]
+
+        now = datetime.now(timezone.utc)
+        valid_until = (now + timedelta(days=30)).isoformat()
+
+        # UPSERT em subscriptions (uma por company)
+        subscription_data = {
+            'company_id': company_id,
+            'plan_id': plan_key,
+            'status': 'active',
+            'current_period_start': now.isoformat(),
+            'current_period_end': valid_until,
+            'updated_at': now.isoformat(),
         }
-        
-        # UPSERT: Atualiza se existir, Cria se não existir
-        db.client.table('user_quotas').upsert(quota_data, on_conflict='user_id').execute()
-        
-        logger.info(f"✅ Usuário {user_id} atualizado/criado com plano {plan_config['name']}")
-        
+        db.client.table('subscriptions')\
+            .upsert(subscription_data, on_conflict='company_id')\
+            .execute()
+
+        # Garante user_quotas (contador) zerado para o usuário
+        db.client.table('user_quotas')\
+            .upsert({
+                'user_id': user_id,
+                'company_id': company_id,
+                'leads_used': 0,
+                'campaigns_used': 0,
+                'messages_sent': 0,
+                'updated_at': now.isoformat(),
+            }, on_conflict='user_id')\
+            .execute()
+
+        logger.info(f"✅ Empresa {company_id} (user {user_id}) atualizada para {plan_config['name']} (order {order_id})")
+
     except Exception as e:
         logger.error(f"Erro ao fazer upgrade: {e}")
         raise
 
 
 async def downgrade_user_to_suspended(user_id: str, reason: str):
-    """Suspende a conta do usuário (sem acesso a nenhuma funcionalidade)"""
+    """Suspende a conta da empresa do usuário (status='suspended' na subscription)."""
     try:
+        from datetime import timezone
         db = get_supabase_service()
-        
-        # Usar plan_type='suspended' como marcador (não temos coluna subscription_status)
-        db.client.table('user_quotas').update({
-            'plan_type': 'suspended',
-            'plan_name': 'Conta Suspensa',
-            'leads_limit': 0,
-            'campaigns_limit': 0,
-            'messages_limit': 0,
-            'subscription_id': None,
-            'updated_at': datetime.now().isoformat()
-        }).eq('user_id', user_id).execute()
-        
-        logger.info(f"⚠️ Usuário {user_id} suspenso. Motivo: {reason}")
-        
+
+        company_id = await _get_company_id_for_user(user_id)
+        if not company_id:
+            logger.error(f"Usuário {user_id} sem company_id — suspensão abortada")
+            return
+
+        db.client.table('subscriptions')\
+            .update({
+                'status': 'suspended',
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            })\
+            .eq('company_id', company_id)\
+            .execute()
+
+        logger.info(f"⚠️ Empresa {company_id} (user {user_id}) suspensa. Motivo: {reason}")
+
     except Exception as e:
         logger.error(f"Erro ao suspender conta: {e}")
         raise
 
 
 async def log_webhook_event(event_type: str, payload: Dict[str, Any], status: str, error: Optional[str] = None):
-    """Registra evento de webhook para auditoria"""
+    """Registra evento de webhook para auditoria (com redaction de PII/secrets)"""
     try:
         db = get_supabase_service()
         db.client.table('webhook_logs').insert({
             'event_type': event_type,
-            'payload': payload,
+            'payload': _sanitize_payload_for_log(payload),
             'status': status,
             'error_message': error,
             'created_at': datetime.now().isoformat()

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { usePlanPermissions } from "@/hooks/usePlanPermissions";
 import { PlanBlockedOverlay } from "@/components/PlanBlockedOverlay";
-import { useCompanySettings } from "@/hooks/useCompanySettings";
+import { useAgentConfig } from "@/hooks/useAgentConfig";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,7 @@ import {
 export default function AgenteIA() {
   const { setPageTitle } = usePageTitle();
   const { permissions, isLoading: isLoadingPermissions } = usePlanPermissions();
-  const { settings, saveSettings, isSaving: isSavingGlobal } = useCompanySettings();
+  const { config, saveConfig, isSaving: isSavingGlobal } = useAgentConfig();
   const { toast } = useToast();
   
   // Campos locais do formulário
@@ -74,45 +74,47 @@ export default function AgenteIA() {
 
   // Carregar configurações do Supabase
   useEffect(() => {
-    if (settings && !isInitialized) {
-      setEnabled(settings.agentEnabled);
-      setName(settings.agentName);
-      setTone(settings.agentTone);
-      setPersonality(settings.agentPersonality);
-      setSystemPrompt(settings.agentSystemPrompt);
-      setWelcomeMessage(settings.agentWelcomeMessage);
-      setResponseDelay(settings.agentResponseDelay);
-      setMaxResponseLength(settings.agentMaxResponseLength);
-      setWorkingHoursEnabled(settings.agentWorkingHoursEnabled);
-      setWorkingHoursStart(settings.agentWorkingHoursStart);
-      setWorkingHoursEnd(settings.agentWorkingHoursEnd);
-      setAutoQualify(settings.agentAutoQualify);
-      setQualificationQuestions(settings.agentQualificationQuestions);
-      setBlockedTopics(settings.agentBlockedTopics);
+    if (config && !isInitialized) {
+      setEnabled(config.enabled);
+      setName(config.name);
+      setTone(config.tone);
+      setPersonality(config.personality);
+      setSystemPrompt(config.systemPrompt);
+      setWelcomeMessage(config.welcomeMessage);
+      setResponseDelay(config.responseDelay);
+      setMaxResponseLength(config.maxResponseLength);
+      setWorkingHoursEnabled(config.workingHours.enabled);
+      setWorkingHoursStart(config.workingHours.start);
+      setWorkingHoursEnd(config.workingHours.end);
+      setAutoQualify(config.autoQualify);
+      setQualificationQuestions(config.qualificationQuestions);
+      setBlockedTopics(config.blockedTopics);
       setIsInitialized(true);
     }
-  }, [settings, isInitialized]);
+  }, [config, isInitialized]);
 
   const markChanged = () => setHasChanges(true);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const success = await saveSettings({
-        agentEnabled: enabled,
-        agentName: name,
-        agentTone: tone,
-        agentPersonality: personality,
-        agentSystemPrompt: systemPrompt,
-        agentWelcomeMessage: welcomeMessage,
-        agentResponseDelay: responseDelay,
-        agentMaxResponseLength: maxResponseLength,
-        agentWorkingHoursEnabled: workingHoursEnabled,
-        agentWorkingHoursStart: workingHoursStart,
-        agentWorkingHoursEnd: workingHoursEnd,
-        agentAutoQualify: autoQualify,
-        agentQualificationQuestions: qualificationQuestions,
-        agentBlockedTopics: blockedTopics,
+      const success = await saveConfig({
+        enabled,
+        name,
+        tone,
+        personality,
+        systemPrompt,
+        welcomeMessage,
+        responseDelay,
+        maxResponseLength,
+        autoQualify,
+        qualificationQuestions,
+        blockedTopics,
+        workingHours: {
+          enabled: workingHoursEnabled,
+          start: workingHoursStart,
+          end: workingHoursEnd,
+        },
       });
       
       if (success) {

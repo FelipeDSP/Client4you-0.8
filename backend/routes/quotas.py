@@ -9,9 +9,14 @@ router = APIRouter(prefix="/quotas", tags=["quotas"])
 
 @router.get("/me")
 async def get_my_quota(auth_user: dict = Depends(get_authenticated_user)):
+    """
+    Retorna quota combinada com info do plano (subscription).
+    Shape mantida compatível com o frontend (plan_type, leads_limit, etc.)
+    mesmo que essas infos venham de tabelas separadas após a migration v1.
+    """
     try:
         db = get_db()
-        quota = await db.get_user_quota(auth_user["user_id"])
+        quota = await db.get_user_quota_with_plan(auth_user["user_id"])
         if not quota:
             raise HTTPException(status_code=404, detail="Quota não encontrada")
         return quota

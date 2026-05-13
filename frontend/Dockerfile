@@ -2,16 +2,14 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Instalar dependências
-# Nota: yarn.lock* com asterisco torna opcional (funciona com ou sem o arquivo)
-COPY package*.json ./
-COPY yarn.lock* ./
-RUN yarn install --frozen-lockfile || yarn install
+# Instalar dependências com npm ci (usa package-lock.json, build reproducível)
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Copiar código fonte
 COPY . .
 
-# Receber argumentos de build do Coolify
+# Variáveis de build injetadas pelo Coolify
 ARG VITE_BACKEND_URL
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
@@ -19,7 +17,6 @@ ARG VITE_SUPABASE_PROJECT_ID
 ARG VITE_TURNSTILE_SITE_KEY
 ARG REACT_APP_BACKEND_URL
 
-# Definir variáveis de ambiente para o build
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
@@ -27,26 +24,19 @@ ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
 ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-# Buildar o projeto
-RUN yarn build
+RUN npm run build
 
 # Estágio de Servidor (Nginx)
 FROM nginx:alpine
 
-# Instalar curl para o healthcheck funcionar
-RUN apk add --no-cache curl wget
+RUN apk add --no-cache wget
 
-# Copiar os arquivos gerados no build (Vite gera na pasta 'dist')
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copiar configuração do Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expor porta 80 do Nginx
 EXPOSE 80
 
-# Healthcheck para Coolify saber quando o app está pronto
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

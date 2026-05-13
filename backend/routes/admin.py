@@ -227,79 +227,100 @@ async def list_all_users(
     IMPORTANTE: Requer role super_admin
     """
     try:
+        import asyncio
         db = get_supabase_service()
         audit = get_audit_service()
-        
-        # user_quotas não tem FK para profiles no schema, então fazemos queries separadas
-        import asyncio
-        query = db.client.table('profiles')\
-            .select('id, email, full_name, company_id, created_at, companies(name), user_roles(role)', count='exact')
 
+        # 1) Busca profiles (sem embed pra evitar ambiguidade de FK do PostgREST)
+        query = db.client.table('profiles').select(
+            'id, email, full_name, company_id, created_at', count='exact'
+        )
         if search:
             query = query.ilike('email', f'%{search}%')
 
-        profiles_result = await asyncio.to_thread(query.order('created_at', desc=True).range(offset, offset + limit - 1).execute)
+        profiles_result = await asyncio.to_thread(
+            query.order('created_at', desc=True).range(offset, offset + limit - 1).execute
+        )
+        profiles = profiles_result.data or []
+        profile_ids = [p['id'] for p in profiles]
+        company_ids = list({p['company_id'] for p in profiles if p.get('company_id')})
 
-        # Busca subscriptions por company_id (fonte do plano agora)
-        company_ids = list({
-            p['company_id'] for p in (profiles_result.data or []) if p.get('company_id')
-        })
+        # 2) Busca companies em lote
+        companies_map: dict = {}
+        if company_ids:
+            companies_result = await asyncio.to_thread(
+                db.client.table('companies').select('id, name').in_('id', company_ids).execute
+            )
+            companies_map = {c['id']: c for c in (companies_result.data or [])}
+
+        # 3) Busca user_roles em lote (multiplas roles por user → lista)
+        roles_map: dict[str, list] = {}
+        if profile_ids:
+            roles_result = await asyncio.to_thread(
+                db.client.table('user_roles').select('user_id, role').in_('user_id', profile_ids).execute
+            )
+            for r in (roles_result.data or []):
+                roles_map.setdefault(r['user_id'], []).append(r['role'])
+
+        # 4) Busca subscriptions em lote (fonte do plano)
         subs_map: dict = {}
         if company_ids:
-            subs_result = db.client.table('subscriptions')\
-                .select('company_id, plan_id, status, current_period_end')\
-                .in_('company_id', company_ids)\
-                .execute()
+            subs_result = await asyncio.to_thread(
+                db.client.table('subscriptions')
+                  .select('company_id, plan_id, status, current_period_end')
+                  .in_('company_id', company_ids).execute
+            )
             subs_map = {s['company_id']: s for s in (subs_result.data or [])}
 
+        # 5) Monta a resposta
         users = []
-        for profile in (profiles_result.data or []):
-            sub = subs_map.get(profile.get('company_id'), {})
+        for profile in profiles:
+            company_id = profile.get('company_id')
+            sub = subs_map.get(company_id, {}) if company_id else {}
             plan_id = sub.get('plan_id') or 'demo'
             sub_status = sub.get('status') or 'expired'
             plan_name = PLAN_LIMITS.get(plan_id, {}).get('name', 'Sem Plano')
-
-            roles = profile.get('user_roles') or []
-            role_names = [r.get('role') for r in roles] if isinstance(roles, list) else []
-
-            companies = profile.get('companies') or {}
+            company = companies_map.get(company_id, {}) if company_id else {}
 
             users.append({
                 'id': profile['id'],
                 'email': profile['email'],
                 'full_name': profile.get('full_name'),
-                'company_id': profile.get('company_id'),
-                'company_name': companies.get('name') if isinstance(companies, dict) else None,
-                'roles': role_names,
+                'company_id': company_id,
+                'company_name': company.get('name'),
+                'roles': roles_map.get(profile['id'], []),
                 'plan_type': plan_id,
                 'plan_name': plan_name,
                 'status': sub_status,
                 'expires_at': sub.get('current_period_end'),
                 'created_at': profile['created_at']
             })
-            
-        # Log de Auditoria
-        await audit.log_action(
-            user_id=auth_user['user_id'],
-            user_email=auth_user['email'],
-            action='view_users_list',
-            target_type='system',
-            target_id=None,
-            target_email=None,
-            details={'offset': offset, 'limit': limit, 'search': search},
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get('user-agent')
-        )
-        
+
+        # 6) Audit log (em try/except próprio — falha aqui não derruba a resposta)
+        try:
+            await audit.log_action(
+                user_id=auth_user['user_id'],
+                user_email=auth_user['email'],
+                action='view_users_list',
+                target_type='system',
+                target_id=None,
+                target_email=None,
+                details={'offset': offset, 'limit': limit, 'search': search},
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get('user-agent')
+            )
+        except Exception as audit_err:
+            logger.warning(f"audit.log_action falhou (não-crítico): {audit_err}")
+
         return {
             'users': users,
             'total': profiles_result.count or len(users),
             'limit': limit,
             'offset': offset
         }
-        
+
     except Exception as e:
-        logger.error(f"Erro ao listar usuários: {e}")
+        logger.error(f"Erro ao listar usuários: {e}", exc_info=True)
         raise handle_error(e, "Erro ao listar")
 
 

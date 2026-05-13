@@ -8,15 +8,13 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  Trash2, 
-  MapPin, 
-  Star, 
+import {
+  Trash2,
+  MapPin,
+  Star,
   Globe,
-  MessageCircle,
   Phone,
-  Check,
-  X
+  Mail,
 } from "lucide-react";
 import { Lead } from "@/types";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +27,6 @@ interface LeadTableProps {
   isLoading?: boolean;
 }
 
-// Função auxiliar para deixar a URL bonita
 const formatWebsite = (url: string) => {
   try {
     const domain = new URL(url).hostname;
@@ -39,20 +36,31 @@ const formatWebsite = (url: string) => {
   }
 };
 
-export function LeadTable({ 
-  leads, 
-  onDelete, 
-  selectedLeads = [], 
+export function LeadTable({
+  leads,
+  onDelete,
+  selectedLeads = [],
   onSelectionChange,
-  isLoading 
+  isLoading,
 }: LeadTableProps) {
-  
+
+  const currentPageIds = leads.map(l => l.id);
+  const allCurrentPageSelected =
+    currentPageIds.length > 0 && currentPageIds.every(id => selectedLeads.includes(id));
+  const someCurrentPageSelected =
+    currentPageIds.some(id => selectedLeads.includes(id)) && !allCurrentPageSelected;
+
   const toggleSelectAll = () => {
     if (!onSelectionChange) return;
-    if (selectedLeads.length === leads.length) {
-      onSelectionChange([]);
+    if (allCurrentPageSelected) {
+      // Remove apenas os da página atual, mantém os de outras páginas
+      const pageSet = new Set(currentPageIds);
+      onSelectionChange(selectedLeads.filter(id => !pageSet.has(id)));
     } else {
-      onSelectionChange(leads.map((l) => l.id));
+      // Adiciona os da página atual sem duplicar os já selecionados
+      const existingSet = new Set(selectedLeads);
+      const toAdd = currentPageIds.filter(id => !existingSet.has(id));
+      onSelectionChange([...selectedLeads, ...toAdd]);
     }
   };
 
@@ -65,7 +73,6 @@ export function LeadTable({
     }
   };
 
-  // Cores da Marca
   if (isLoading) {
     return (
       <div className="p-12 text-center space-y-4">
@@ -92,19 +99,18 @@ export function LeadTable({
   return (
     <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm bg-white">
       <Table>
-        {/* Cabeçalho com a cor da marca */}
         <TableHeader className="bg-blue-900">
           <TableRow className="hover:bg-blue-900/90 border-none">
             <TableHead className="w-[40px] pl-4">
-              <Checkbox 
-                checked={leads.length > 0 && selectedLeads.length === leads.length}
+              <Checkbox
+                checked={allCurrentPageSelected ? true : someCurrentPageSelected ? "indeterminate" : false}
                 onCheckedChange={toggleSelectAll}
-                className="border-white/50 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+                className="border-white/50 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground data-[state=indeterminate]:bg-primary/50 data-[state=indeterminate]:border-primary/50"
               />
             </TableHead>
             <TableHead className="min-w-[200px] font-semibold text-white/90">Empresa</TableHead>
             <TableHead className="min-w-[140px] font-semibold text-white/90">Telefone</TableHead>
-            <TableHead className="w-[100px] text-center font-semibold text-white/90">WhatsApp</TableHead>
+            <TableHead className="min-w-[180px] font-semibold text-white/90">E-mail</TableHead>
             <TableHead className="min-w-[140px] font-semibold text-white/90">Site</TableHead>
             <TableHead className="min-w-[180px] font-semibold text-white/90">Endereço</TableHead>
             <TableHead className="w-[80px] text-center font-semibold text-white/90">Nota</TableHead>
@@ -113,13 +119,12 @@ export function LeadTable({
         </TableHeader>
         <TableBody>
           {leads.map((lead) => (
-            <TableRow 
-              key={lead.id} 
+            <TableRow
+              key={lead.id}
               className={`hover:bg-slate-50/80 group h-14 text-sm border-b border-slate-100 transition-colors ${selectedLeads.includes(lead.id) ? 'bg-orange-50/30' : ''}`}
             >
-              {/* Checkbox */}
               <TableCell className="pl-4">
-                <Checkbox 
+                <Checkbox
                   checked={selectedLeads.includes(lead.id)}
                   onCheckedChange={() => toggleSelectOne(lead.id)}
                   className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
@@ -152,32 +157,24 @@ export function LeadTable({
                 )}
               </TableCell>
 
-              {/* WhatsApp (Indicador Visual) */}
-              <TableCell className="py-2 text-center">
-                {lead.hasWhatsApp ? (
-                  <div className="flex justify-center animate-in zoom-in duration-300">
-                    <div 
-                      className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 shadow-sm border border-green-200" 
-                      title="WhatsApp Verificado"
-                    >
-                      <MessageCircle className="h-4 w-4 fill-green-600" />
-                    </div>
+              {/* E-mail */}
+              <TableCell className="py-2">
+                {lead.email ? (
+                  <div className="flex items-center gap-1.5 max-w-[180px]" title={lead.email}>
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                    <span className="truncate text-xs text-slate-600 font-medium">{lead.email}</span>
                   </div>
                 ) : (
-                  <div className="flex justify-center" title="Sem WhatsApp ou Não Verificado">
-                    <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
-                      <X className="h-4 w-4" />
-                    </div>
-                  </div>
+                  <span className="text-slate-300 text-xs pl-1">-</span>
                 )}
               </TableCell>
 
               {/* Site */}
               <TableCell className="py-2">
                 {lead.website ? (
-                  <a 
-                    href={lead.website} 
-                    target="_blank" 
+                  <a
+                    href={lead.website}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 transition-colors group/link max-w-[140px] hover:underline"
                   >

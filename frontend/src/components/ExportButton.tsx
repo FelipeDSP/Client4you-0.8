@@ -9,34 +9,36 @@ interface ExportButtonProps {
   selectedLeads?: string[];
 }
 
-// Função auxiliar para separar Endereço de Cidade/Estado
 const splitAddress = (fullAddress: string) => {
   if (!fullAddress) return { location: "", cityState: "" };
 
-  // Tenta encontrar o padrão ", Cidade - UF" (comum no Brasil)
-  // Ex: "Rua X, 123 - Bairro, Cidade - SP"
-  // Captura o que está antes de " - UF" sendo a cidade
   const match = fullAddress.match(/, ([^,]+?) - ([A-Z]{2})/);
-
   if (match) {
     const city = match[1];
     const state = match[2];
-    // Pega tudo antes da virgula que precede a cidade
     const location = fullAddress.substring(0, match.index).trim();
-    
-    return { 
-      location: location, 
-      cityState: `${city} - ${state}` 
-    };
+    return { location, cityState: `${city} - ${state}` };
   }
 
-  // Fallback: Se não achar o padrão exato, retorna tudo no endereço e deixa cidade vazia
-  // ou tenta pegar só o final se for "Cidade - UF"
   if (fullAddress.match(/^([^,]+?) - ([A-Z]{2})/)) {
-     return { location: "", cityState: fullAddress };
+    return { location: "", cityState: fullAddress };
   }
 
   return { location: fullAddress, cityState: "" };
+};
+
+const downloadBlob = (buffer: ArrayBuffer, filename: string) => {
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
 
 export function ExportButton({ leads, selectedLeads = [] }: ExportButtonProps) {
@@ -57,19 +59,18 @@ export function ExportButton({ leads, selectedLeads = [] }: ExportButtonProps) {
     }
 
     const data = leadsToExport.map((lead) => {
-      // Aplica a separação do endereço
-      const addressInfo = splitAddress(lead.address);
-
+      const { location, cityState } = splitAddress(lead.address);
       return {
         "Nome da Empresa": lead.name,
         "Categoria": lead.category || "Geral",
         "Telefone": lead.phone || "",
-        "WhatsApp": lead.hasWhatsApp ? "Sim" : "Não",
-        "Endereço (Local)": addressInfo.location,     // <--- Nova Coluna
-        "Cidade/Estado": addressInfo.cityState,       // <--- Nova Coluna
-        "Endereço Completo": lead.address,            // Mantemos o original por segurança
-        "Nota (Rating)": lead.rating || "",
+        "E-mail": lead.email || "",
         "Website": lead.website || "",
+        "Endereço": location,
+        "Cidade/Estado": cityState,
+        "Endereço Completo": lead.address,
+        "Nota": lead.rating || "",
+        "Avaliações": lead.reviews || "",
         "Data Extração": new Date().toLocaleDateString("pt-BR"),
       };
     });
@@ -78,24 +79,31 @@ export function ExportButton({ leads, selectedLeads = [] }: ExportButtonProps) {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Leads");
 
-    // Ajusta largura das colunas
-    const colWidths = Object.keys(data[0]).map((key) => ({
-      wch: Math.max(key.length, 20),
-    }));
+    // Ajusta largura das colunas pelo maior conteúdo
+    const colWidths = Object.keys(data[0]).map((key) => {
+      const maxLen = Math.max(
+        key.length,
+        ...leadsToExport.map(l => String((data[0] as any)[key] ?? "").length)
+      );
+      return { wch: Math.min(maxLen + 2, 50) };
+    });
     worksheet["!cols"] = colWidths;
 
-    XLSX.writeFile(workbook, `leads_exportados_${new Date().toISOString().split("T")[0]}.xlsx`);
+    // Usa write + Blob para garantir compatibilidade com browser
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const filename = `leads_${new Date().toISOString().split("T")[0]}.xlsx`;
+    downloadBlob(buffer, filename);
 
     toast({
       title: "Download iniciado",
-      description: `${leadsToExport.length} leads foram exportados com sucesso.`,
+      description: `${leadsToExport.length} leads exportados.`,
     });
   };
 
   return (
-    <Button 
-      variant="outline" 
-      size="sm" 
+    <Button
+      variant="outline"
+      size="sm"
       onClick={handleExport}
       className="gap-2 bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
     >

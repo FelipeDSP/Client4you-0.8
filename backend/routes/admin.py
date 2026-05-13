@@ -226,31 +226,35 @@ async def list_all_users(
         db = get_supabase_service()
         audit = get_audit_service()
         
-        # Native PostgREST Join: Puxa profiles e injeta user_quotas, user_roles e companies num único request
+        # user_quotas não tem FK para profiles no schema, então fazemos queries separadas
+        import asyncio
         query = db.client.table('profiles')\
-            .select('id, email, full_name, company_id, created_at, companies(name), user_quotas(plan_type, plan_name, plan_expires_at), user_roles(role)', count='exact')
-            
+            .select('id, email, full_name, company_id, created_at, companies(name), user_roles(role)', count='exact')
+
         if search:
             query = query.ilike('email', f'%{search}%')
-            
-        # IMPORTANTE: No backend python v1 do supabase, range() e order()
-        import asyncio
+
         profiles_result = await asyncio.to_thread(query.order('created_at', desc=True).range(offset, offset + limit - 1).execute)
-        
+
+        # Busca quotas de todos os perfis da página de uma vez
+        profile_ids = [p['id'] for p in (profiles_result.data or [])]
+        quotas_map: dict = {}
+        if profile_ids:
+            quotas_result = db.client.table('user_quotas')\
+                .select('user_id, plan_type, plan_name, plan_expires_at')\
+                .in_('user_id', profile_ids)\
+                .execute()
+            quotas_map = {q['user_id']: q for q in (quotas_result.data or [])}
+
         users = []
         for profile in (profiles_result.data or []):
-            # Extração segura considerando que FK pode retornar lista ou ditos
-            quotas = profile.get('user_quotas') or {}
-            if isinstance(quotas, list) and len(quotas) > 0:
-                quotas = quotas[0]
-            elif isinstance(quotas, list):
-                quotas = {}
-                
+            quotas = quotas_map.get(profile['id'], {})
+
             roles = profile.get('user_roles') or []
             role_names = [r.get('role') for r in roles] if isinstance(roles, list) else []
-            
+
             companies = profile.get('companies') or {}
-            
+
             users.append({
                 'id': profile['id'],
                 'email': profile['email'],
@@ -271,7 +275,7 @@ async def list_all_users(
             user_email=auth_user['email'],
             action='view_users_list',
             target_type='system',
-            target_id='admin_dashboard',
+            target_id=None,
             target_email=None,
             details={'offset': offset, 'limit': limit, 'search': search},
             ip_address=request.client.host if request.client else None,
@@ -752,7 +756,7 @@ async def list_all_companies(
             user_email=auth_user['email'],
             action='view_companies_list',
             target_type='system',
-            target_id='admin_dashboard',
+            target_id=None,
             target_email=None,
             details={'offset': offset, 'limit': limit, 'search': search},
             ip_address=request.client.host if request.client else None,

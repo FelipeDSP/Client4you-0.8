@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Filter, X, Search, Globe, MessageCircle, Star, Users } from "lucide-react";
+import { Filter, X, Search, Globe, Star, Users, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,39 +14,35 @@ import { Lead } from "@/types";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// 1. Definição do Estado dos Filtros
 export interface LeadFilterState {
   search: string;
-  hasWhatsApp: boolean | null;
-  hasWebsite: boolean | null; // Novo: Filtro de Site
-  minRating: number;          // Novo: Nota mínima
-  minReviews: number;         // Novo: Mínimo de avaliações
+  hasWebsite: boolean | null;
+  hasEmail: boolean | null;
+  minRating: number;
+  minReviews: number;
 }
 
-// 2. Props do Componente
 interface LeadFiltersProps {
   leads: Lead[];
   filters: LeadFilterState;
   onFiltersChange: (filters: LeadFilterState) => void;
 }
 
-// 3. Estado Inicial
 export const defaultFilters: LeadFilterState = {
   search: "",
-  hasWhatsApp: null,
   hasWebsite: null,
+  hasEmail: null,
   minRating: 0,
   minReviews: 0,
 };
 
-// 4. Componente Principal
 export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
-    if (filters.hasWhatsApp !== null) count++;
     if (filters.hasWebsite !== null) count++;
+    if (filters.hasEmail !== null) count++;
     if (filters.minRating > 0) count++;
     if (filters.minReviews > 0) count++;
     return count;
@@ -84,42 +80,12 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
         </PopoverTrigger>
         <PopoverContent className="w-80 p-5" align="start">
           <div className="space-y-6">
-            
+
             {/* Seção 1: Canais de Contato */}
             <div className="space-y-3">
               <h4 className="font-medium text-sm text-slate-500 uppercase tracking-wider">Canais</h4>
-              
-              <div className="grid grid-cols-2 gap-4">
-                {/* WhatsApp */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4 text-green-600" />
-                    <Label className="text-sm font-medium">WhatsApp</Label>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="hasWhatsApp"
-                        checked={filters.hasWhatsApp === true}
-                        onCheckedChange={(checked) => 
-                          onFiltersChange({ ...filters, hasWhatsApp: checked ? true : null })
-                        }
-                      />
-                      <Label htmlFor="hasWhatsApp" className="text-xs text-slate-600 font-normal">Possui</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="noWhatsApp"
-                        checked={filters.hasWhatsApp === false}
-                        onCheckedChange={(checked) => 
-                          onFiltersChange({ ...filters, hasWhatsApp: checked ? false : null })
-                        }
-                      />
-                      <Label htmlFor="noWhatsApp" className="text-xs text-slate-600 font-normal">Não possui</Label>
-                    </div>
-                  </div>
-                </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 {/* Site */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -131,7 +97,7 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
                       <Checkbox
                         id="hasWebsite"
                         checked={filters.hasWebsite === true}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked) =>
                           onFiltersChange({ ...filters, hasWebsite: checked ? true : null })
                         }
                       />
@@ -141,11 +107,41 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
                       <Checkbox
                         id="noWebsite"
                         checked={filters.hasWebsite === false}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked) =>
                           onFiltersChange({ ...filters, hasWebsite: checked ? false : null })
                         }
                       />
                       <Label htmlFor="noWebsite" className="text-xs text-slate-600 font-normal">Não possui</Label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* E-mail */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-blue-500" />
+                    <Label className="text-sm font-medium">E-mail</Label>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="hasEmail"
+                        checked={filters.hasEmail === true}
+                        onCheckedChange={(checked) =>
+                          onFiltersChange({ ...filters, hasEmail: checked ? true : null })
+                        }
+                      />
+                      <Label htmlFor="hasEmail" className="text-xs text-slate-600 font-normal">Possui</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="noEmail"
+                        checked={filters.hasEmail === false}
+                        onCheckedChange={(checked) =>
+                          onFiltersChange({ ...filters, hasEmail: checked ? false : null })
+                        }
+                      />
+                      <Label htmlFor="noEmail" className="text-xs text-slate-600 font-normal">Não possui</Label>
                     </div>
                   </div>
                 </div>
@@ -187,8 +183,8 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
                 <Users className="h-4 w-4 text-slate-600" />
                 <Label className="text-sm font-medium">Mínimo de Avaliações</Label>
               </div>
-              <Select 
-                value={filters.minReviews.toString()} 
+              <Select
+                value={filters.minReviews.toString()}
                 onValueChange={(val) => onFiltersChange({ ...filters, minReviews: Number(val) })}
               >
                 <SelectTrigger className="h-9">
@@ -205,8 +201,8 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
             </div>
 
             {/* Botão de Limpar */}
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               className="w-full mt-2 bg-slate-100 hover:bg-slate-200 text-slate-600"
               onClick={handleReset}
             >
@@ -216,20 +212,20 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
         </PopoverContent>
       </Popover>
 
-      {/* Badges de Filtros Ativos (Atalhos para remover) */}
-      {filters.hasWhatsApp !== null && (
-        <Badge variant="outline" className="gap-1 border-green-200 bg-green-50 text-green-700 pl-2 pr-1 py-1">
-          {filters.hasWhatsApp ? "Com WhatsApp" : "Sem WhatsApp"}
-          <Button variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-green-100 rounded-full" onClick={() => onFiltersChange({ ...filters, hasWhatsApp: null })}>
-            <X className="h-3 w-3" />
-          </Button>
-        </Badge>
-      )}
-      
+      {/* Badges de filtros ativos */}
       {filters.hasWebsite !== null && (
         <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-700 pl-2 pr-1 py-1">
           {filters.hasWebsite ? "Com Site" : "Sem Site"}
           <Button variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-blue-100 rounded-full" onClick={() => onFiltersChange({ ...filters, hasWebsite: null })}>
+            <X className="h-3 w-3" />
+          </Button>
+        </Badge>
+      )}
+
+      {filters.hasEmail !== null && (
+        <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-700 pl-2 pr-1 py-1">
+          {filters.hasEmail ? "Com E-mail" : "Sem E-mail"}
+          <Button variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-blue-100 rounded-full" onClick={() => onFiltersChange({ ...filters, hasEmail: null })}>
             <X className="h-3 w-3" />
           </Button>
         </Badge>
@@ -253,10 +249,8 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
   );
 }
 
-// 5. Lógica de Filtragem Atualizada
 export function filterLeads(leads: Lead[], filters: LeadFilterState): Lead[] {
   return leads.filter((lead) => {
-    // 1. Busca por Texto (Nome ou Categoria)
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       const matchesName = lead.name.toLowerCase().includes(searchLower);
@@ -264,20 +258,15 @@ export function filterLeads(leads: Lead[], filters: LeadFilterState): Lead[] {
       if (!matchesName && !matchesCategory) return false;
     }
 
-    // 2. Filtro de WhatsApp
-    if (filters.hasWhatsApp === true && !lead.hasWhatsApp) return false;
-    if (filters.hasWhatsApp === false && lead.hasWhatsApp) return false;
-
-    // 3. Filtro de Site (Novo)
-    // Considera "com site" se o campo website existir e não for vazio
     const hasSite = Boolean(lead.website && lead.website.length > 0);
     if (filters.hasWebsite === true && !hasSite) return false;
     if (filters.hasWebsite === false && hasSite) return false;
 
-    // 4. Filtro de Avaliação (Novo)
-    if (lead.rating < filters.minRating) return false;
+    const hasEmail = Boolean(lead.email && lead.email.length > 0);
+    if (filters.hasEmail === true && !hasEmail) return false;
+    if (filters.hasEmail === false && hasEmail) return false;
 
-    // 5. Filtro de Reviews (Novo)
+    if (lead.rating < filters.minRating) return false;
     if (lead.reviews < filters.minReviews) return false;
 
     return true;

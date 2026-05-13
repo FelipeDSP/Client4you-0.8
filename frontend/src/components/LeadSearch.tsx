@@ -3,23 +3,39 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, MapPin, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-// Interface define o que o componente ACEITA receber do pai
 interface LeadSearchProps {
-  onSearch: (term: string, location: string) => void;
+  onSearch: (term: string, location: string, limit: number | null) => void;
   isSearching: boolean;
   disabled?: boolean;
 }
 
+const LIMIT_OPTIONS = [
+  { label: "Sem limite", value: "0" },
+  { label: "Até 20", value: "20" },
+  { label: "Até 40", value: "40" },
+  { label: "Até 60", value: "60" },
+  { label: "Até 100", value: "100" },
+  { label: "Até 200", value: "200" },
+];
+
 export function LeadSearch({ onSearch, isSearching, disabled = false }: LeadSearchProps) {
   const [term, setTerm] = useState("");
   const [location, setLocation] = useState("");
+  const [limitValue, setLimitValue] = useState("0");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (term && location) {
-      // Chama a função que veio do pai (SearchLeads.tsx)
-      onSearch(term, location);
+      const limit = parseInt(limitValue) || null;
+      onSearch(term, location, limit);
     }
   };
 
@@ -36,7 +52,7 @@ export function LeadSearch({ onSearch, isSearching, disabled = false }: LeadSear
             required
           />
         </div>
-        
+
         <div className="flex-1 relative">
           <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -48,8 +64,21 @@ export function LeadSearch({ onSearch, isSearching, disabled = false }: LeadSear
           />
         </div>
 
-        <Button 
-          type="submit" 
+        <Select value={limitValue} onValueChange={setLimitValue}>
+          <SelectTrigger className="md:w-36 bg-gray-50 border-gray-200">
+            <SelectValue placeholder="Limite" />
+          </SelectTrigger>
+          <SelectContent>
+            {LIMIT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button
+          type="submit"
           disabled={isSearching || !term || !location || disabled}
           className="md:w-32 font-medium"
         >

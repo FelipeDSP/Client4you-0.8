@@ -180,14 +180,14 @@ export function useLeads() {
     }
   });
 
-  // --- 4. MUTATION: Validar Leads (Python Backend) ---
-  const validateMutation = useMutation({
+  // --- 4. MUTATION: Extrair Emails via Firecrawl ---
+  const enrichEmailsMutation = useMutation({
     mutationFn: async (leadIds: string[]) => {
       if (leadIds.length === 0) return [];
       const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
       const { data: { session } } = await supabase.auth.getSession();
-      
-      const response = await fetch(`${backendUrl}/api/leads/validate`, {
+
+      const response = await fetch(`${backendUrl}/api/leads/enrich-emails`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -196,23 +196,22 @@ export function useLeads() {
         body: JSON.stringify({ lead_ids: leadIds }),
       });
 
-      if (!response.ok) throw new Error("Erro na validação");
+      if (!response.ok) throw new Error("Erro na extração de emails");
       return response.json();
     },
     onSuccess: (data) => {
-       if (data.updated && data.updated.length > 0) {
-         // Atualiza cache localmente sem refetch
-         queryClient.setQueryData(['leads', user?.companyId], (oldLeads: Lead[] = []) => {
-           return oldLeads.map(lead => {
-             const wasUpdated = data.updated.find((u: any) => u.id === lead.id);
-             return wasUpdated ? { ...lead, hasWhatsApp: true } : lead;
-           });
-         });
-       }
-    }
+      if (data.updated && data.updated.length > 0) {
+        queryClient.setQueryData(['leads', user?.companyId], (oldLeads: Lead[] = []) =>
+          oldLeads.map(lead => {
+            const updated = data.updated.find((u: any) => u.id === lead.id);
+            return updated ? { ...lead, email: updated.email } : lead;
+          })
+        );
+      }
+    },
   });
 
-  // --- 5. Outras Actions (Delete, Clear) ---
+  // --- 6. Outras Actions (Delete, Clear) ---
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("leads").delete().eq("id", id);
@@ -260,8 +259,8 @@ export function useLeads() {
     }
   });
 
-  // --- Wrapper Functions para manter compatibilidade ---
-  
+  // --- Wrapper Functions ---
+
   const searchLeads = async (query: string, location: string, start: number = 0, existingSearchId?: string) => {
     setIsSearching(true);
     try {
@@ -274,9 +273,9 @@ export function useLeads() {
     }
   };
 
-  const validateLeads = async (leadIds: string[]) => {
+  const enrichEmails = async (leadIds: string[]) => {
     try {
-      const data = await validateMutation.mutateAsync(leadIds);
+      const data = await enrichEmailsMutation.mutateAsync(leadIds);
       return data.updated || [];
     } catch { return []; }
   };
@@ -284,10 +283,11 @@ export function useLeads() {
   return {
     leads,
     searchHistory,
-    isSearching, // Estado local para UI de 'buscando...'
-    isLoading: isLoadingLeads, // Estado global de 'carregando dados iniciais'
+    isSearching,
+    isLoading: isLoadingLeads,
+    isEnrichingEmails: enrichEmailsMutation.isPending,
     searchLeads,
-    validateLeads,
+    enrichEmails,
     deleteLead: (id: string) => deleteLeadMutation.mutate(id),
     clearAllLeads: () => clearAllLeadsMutation.mutate(),
     getLeadsBySearchId: (searchId: string) => leads.filter((l) => l.searchId === searchId),

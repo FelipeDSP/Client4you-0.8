@@ -28,16 +28,27 @@ function generateSessionToken(): string {
 const SESSION_TOKEN_KEY = 'app_session_token';
 
 async function fetchUserProfile(userId: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*, companies(name)")
-    .eq("id", userId)
-    .single();
+  // profiles e user_roles em paralelo — profiles não tem coluna `role`,
+  // as roles vivem em user_roles (uma linha por role atribuído).
+  const [profileResult, rolesResult] = await Promise.all([
+    supabase.from("profiles").select("*, companies(name)").eq("id", userId).single(),
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+  ]);
 
+  const { data, error } = profileResult;
   if (error || !data) {
     console.error("Error fetching profile:", error);
     return null;
   }
+
+  // Hierarquia: super_admin > company_owner > member > user.
+  // Mantemos a role mais alta como `role` pro check do ProtectedRoute.
+  const rolesList = (rolesResult.data || []).map((r) => (r as any).role as string);
+  let role: string;
+  if (rolesList.includes("super_admin")) role = "super_admin";
+  else if (rolesList.includes("company_owner")) role = "company_owner";
+  else if (rolesList.includes("member")) role = "member";
+  else role = "user";
 
   const companyName = (data.companies as any)?.name || "";
 
@@ -47,7 +58,7 @@ async function fetchUserProfile(userId: string): Promise<User | null> {
     fullName: data.full_name,
     avatarUrl: data.avatar_url,
     companyId: data.company_id,
-    role: (data as any).role || undefined,
+    role,
     name: data.full_name || data.email.split("@")[0],
     company: companyName,
   };

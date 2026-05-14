@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+trap 'echo "❌ Erro na linha $LINENO. Abortando."; exit 1' ERR
 #====================================================================================================
 # SETUP FINAL - HOSTINGER VPS
 # IP: 72.60.10.10

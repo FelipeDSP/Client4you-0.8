@@ -44,6 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPost } from "@/lib/api";
 import {
   Tooltip,
   TooltipContent,
@@ -54,34 +55,18 @@ import {
 // URL do backend a partir de variável de ambiente
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.REACT_APP_BACKEND_URL || '';
 
-// Helper para fazer requisições autenticadas
+// Helper para fazer requisições autenticadas — agora usa makeAuthenticatedRequest
+// (via apiGet/apiPost), que inclui automaticamente o X-Session-Token
+// e o tratamento de sessão expirada em outro dispositivo.
 const createAuthenticatedApi = () => ({
   get: async (url: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-    const response = await fetch(`${BACKEND_URL}/api${url}`, { headers });
+    const response = await apiGet(`${BACKEND_URL}/api${url}`);
     return response.json();
   },
   post: async (url: string, body?: unknown) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-    const response = await fetch(`${BACKEND_URL}/api${url}`, { 
-      method: 'POST',
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    });
+    const response = await apiPost(`${BACKEND_URL}/api${url}`, body);
     return response.json();
-  }
+  },
 });
 
 type WAStatus = "LOADING" | "DISCONNECTED" | "STARTING" | "SCANNING" | "CONNECTED";

@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+trap 'echo "❌ Erro na linha $LINENO. Abortando."; exit 1' ERR
 #====================================================================================================
 # INSTALAÇÃO RÁPIDA - DISPARADOR DE WHATSAPP
 # VPS Hostinger - Debian 13 - IP: 72.60.10.10

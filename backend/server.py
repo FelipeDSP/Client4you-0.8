@@ -33,14 +33,16 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Custom validation error handler
+# Custom validation error handler.
+# Não logamos `exc.body` nem o devolvemos no payload: o body pode conter
+# credenciais (senhas em login, tokens em headers, etc.) e o log seria
+# escrito em texto claro nos logs do Coolify.
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"❌ Validation error on {request.url}: {exc.errors()}")
-    logger.error(f"Body: {exc.body}")
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": exc.body}
+        content={"detail": exc.errors()}
     )
 
 # Middlewares Setup

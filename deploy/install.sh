@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+trap 'echo "❌ Erro na linha $LINENO. Abortando."; exit 1' ERR
 #====================================================================================================
 # SCRIPT DE INSTALAÇÃO - DISPARADOR DE WHATSAPP
 # Para: Debian 13 (Trixie)
@@ -70,6 +72,8 @@ echo -e "${YELLOW}Após baixar o código, execute o script: setup.sh${NC}"
 # Criar script de setup
 cat > /var/www/disparador/setup.sh << 'SETUP_SCRIPT'
 #!/bin/bash
+set -euo pipefail
+trap 'echo "❌ Erro na linha $LINENO. Abortando."; exit 1' ERR
 IP_VPS="__IP_PLACEHOLDER__"
 
 RED='\033[0;31m'

@@ -58,8 +58,10 @@ export function useLeads() {
       }));
     },
     enabled: !!user?.companyId,
-    // CRÍTICO: Não refetch automaticamente. Só atualiza se forçarmos ou na busca.
-    staleTime: Infinity,
+    // 5min é equilíbrio: evita refetch a cada navegação mas pega
+    // novos leads inseridos por outro fluxo (campanha, remarketing, etc.)
+    // sem precisar refresh manual.
+    staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
   });
 

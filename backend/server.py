@@ -90,6 +90,8 @@ from routes.auth import security_router
 from routes.webhooks import webhook_router
 from routes.openai_proxy import router as openai_proxy_router
 from routes.email_accounts import router as email_accounts_router
+from routes.email_campaigns import router as email_campaigns_router
+from routes.email_tracking import router as email_tracking_router
 
 # Setup unified API router
 api_router = APIRouter(prefix="/api")
@@ -109,6 +111,8 @@ api_router.include_router(dashboard_router)
 api_router.include_router(quotas_router)
 api_router.include_router(openai_proxy_router)
 api_router.include_router(email_accounts_router)
+api_router.include_router(email_campaigns_router)
+api_router.include_router(email_tracking_router)
 
 # Attach everything to the main app
 app.include_router(api_router)

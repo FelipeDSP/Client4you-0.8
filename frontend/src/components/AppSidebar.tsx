@@ -4,7 +4,6 @@ import {
   History,
   Settings,
   User,
-  MessageSquare,
   LogOut,
   ShieldCheck,
   Lock,
@@ -58,13 +57,6 @@ const featureItems = [
     icon: Search,
     requiredPlan: null,
     feature: 'leads' as const,
-  },
-  {
-    title: "Disparador",
-    url: "/disparador",
-    icon: MessageSquare,
-    requiredPlan: 'intermediario' as const,
-    feature: 'disparador' as const,
   },
 ];
 

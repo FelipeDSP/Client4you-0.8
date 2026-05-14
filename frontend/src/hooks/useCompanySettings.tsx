@@ -14,14 +14,6 @@ export interface CompanySettings {
   wahaSession: string | null;
   // Geral
   timezone: string;
-  // Remarketing
-  remarketingEnabled: boolean;
-  remarketingDelayDays: number;
-  remarketingDailyLimit: number;
-  remarketingTime: string;
-  remarketingIntervalMin: number;
-  remarketingIntervalMax: number;
-  remarketingMessage: string;
   // Timestamps
   createdAt: string;
   updatedAt: string;
@@ -57,14 +49,6 @@ function mapSettingsData(raw: Record<string, unknown>, companyId: string, timezo
     wahaSession: (raw.waha_session as string) || null,
     // Geral
     timezone,
-    // Remarketing
-    remarketingEnabled: (raw.remarketing_enabled as boolean) ?? COMPANY_SETTINGS_DEFAULTS.remarketingEnabled!,
-    remarketingDelayDays: (raw.remarketing_delay_days as number) ?? COMPANY_SETTINGS_DEFAULTS.remarketingDelayDays!,
-    remarketingDailyLimit: (raw.remarketing_daily_limit as number) ?? COMPANY_SETTINGS_DEFAULTS.remarketingDailyLimit!,
-    remarketingTime: (raw.remarketing_time as string) || COMPANY_SETTINGS_DEFAULTS.remarketingTime!,
-    remarketingIntervalMin: (raw.remarketing_interval_min as number) ?? COMPANY_SETTINGS_DEFAULTS.remarketingIntervalMin!,
-    remarketingIntervalMax: (raw.remarketing_interval_max as number) ?? COMPANY_SETTINGS_DEFAULTS.remarketingIntervalMax!,
-    remarketingMessage: (raw.remarketing_message as string) || COMPANY_SETTINGS_DEFAULTS.remarketingMessage!,
     // Timestamps
     createdAt: (raw.created_at as string) || new Date().toISOString(),
     updatedAt: (raw.updated_at as string) || new Date().toISOString(),

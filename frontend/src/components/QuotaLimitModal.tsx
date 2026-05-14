@@ -40,12 +40,12 @@ export function QuotaLimitModal({
             Escolha o Plano Ideal 🚀
           </DialogTitle>
           <DialogDescription className="text-center text-lg text-slate-600 max-w-2xl mx-auto">
-            Desbloqueie mais leads, disparos ilimitados e recursos exclusivos de IA para escalar sua operação.
+            Desbloqueie campanhas de email, lead scoring e gestão completa pra escalar sua operação.
           </DialogDescription>
         </DialogHeader>
 
         {/* Planos */}
-        <div className="grid md:grid-cols-3 gap-6 py-6 px-2">
+        <div className="grid md:grid-cols-2 gap-6 py-6 px-2">
           
           {/* PLANO BÁSICO */}
           <Card className="relative overflow-hidden border border-slate-200 hover:border-blue-400 hover:shadow-xl transition-all duration-300 bg-white group">
@@ -93,11 +93,11 @@ export function QuotaLimitModal({
                 </div>
                 <div className="flex items-center gap-3 text-slate-400">
                   <span className="w-4 text-center text-lg leading-none">−</span>
-                  <span>Disparador WhatsApp</span>
+                  <span>Campanhas de Email</span>
                 </div>
                 <div className="flex items-center gap-3 text-slate-400">
                   <span className="w-4 text-center text-lg leading-none">−</span>
-                  <span>Agente IA</span>
+                  <span>Lead scoring</span>
                 </div>
               </div>
 
@@ -146,25 +146,25 @@ export function QuotaLimitModal({
                   <div className="mt-0.5 rounded-full bg-green-100 p-0.5">
                     <Check className="h-3 w-3 text-green-600" />
                   </div>
-                  <span className="text-slate-700"><strong>Disparador WhatsApp</strong> Ilimitado</span>
+                  <span className="text-slate-700"><strong>Campanhas de Email</strong> (em breve)</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 rounded-full bg-green-100 p-0.5">
                     <Check className="h-3 w-3 text-green-600" />
                   </div>
-                  <span className="text-slate-700">Conexão via QR Code</span>
+                  <span className="text-slate-700">Tracking de abertura e clique</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 rounded-full bg-green-100 p-0.5">
                     <Check className="h-3 w-3 text-green-600" />
                   </div>
-                  <span className="text-slate-700">Importação de listas</span>
+                  <span className="text-slate-700">Segmentos e tags</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 rounded-full bg-green-100 p-0.5">
                     <Check className="h-3 w-3 text-green-600" />
                   </div>
-                  <span className="text-slate-700">Agendamento de disparos</span>
+                  <span className="text-slate-700">Lead scoring automático</span>
                 </div>
               </div>
 

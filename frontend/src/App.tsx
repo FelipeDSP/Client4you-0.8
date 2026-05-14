@@ -21,7 +21,6 @@ const History = lazy(() => import("./pages/History"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Admin = lazy(() => import("./pages/Admin"));
-const Disparador = lazy(() => import("./pages/Disparador"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SearchLeads = lazy(() => import("./pages/SearchLeads"));
@@ -195,16 +194,6 @@ const AppRoutes = () => (
         <ProtectedRoute>
           <MainLayout>
             <Settings />
-          </MainLayout>
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/disparador"
-      element={
-        <ProtectedRoute>
-          <MainLayout>
-            <Disparador />
           </MainLayout>
         </ProtectedRoute>
       }

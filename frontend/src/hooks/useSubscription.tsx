@@ -76,10 +76,9 @@ export const plans: SubscriptionPlan[] = [
     leadsLimit: null, // unlimited
     features: [
       { name: "Tudo do plano Básico", included: true },
-      { name: "Disparador de Campanhas WhatsApp", included: true, limit: "Ilimitado" },
-      { name: "Conexão WhatsApp automatizada", included: true },
-      { name: "Upload de listas de contatos", included: true },
-      { name: "Agendamento de mensagens", included: true },
+      { name: "Campanhas de Email (em breve)", included: true, limit: "Ilimitado" },
+      { name: "Lead scoring e segmentos", included: true },
+      { name: "Tracking de abertura e clique", included: true },
       { name: "Suporte prioritário", included: true },
     ],
   },

@@ -352,21 +352,6 @@ export default function Profile() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600 font-medium">Disparos WhatsApp</span>
-                    <span className="text-primary font-bold">
-                      {quota?.messages_limit === -1 
-                        ? `${quota?.messages_sent} / ∞` 
-                        : `${quota?.messages_sent || 0} / ${quota?.messages_limit || 0}`}
-                    </span>
-                  </div>
-                  <Progress 
-                    value={quota?.messages_limit === -1 ? 100 : ((quota?.messages_sent || 0) / (quota?.messages_limit || 1)) * 100} 
-                    className="h-2 bg-slate-100"
-                    indicatorClassName="bg-primary" // Laranja para WhatsApp
-                  />
-                </div>
               </div>
 
               {planType !== 'intermediario' && (

@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_BACKEND_URL || "";
 
 export interface DashboardStats {
   total_leads: number;
+  // Campos abaixo viram 0 enquanto email campaigns não existem (Fase 1)
   total_campaigns: number;
   active_campaigns: number;
   total_messages_sent: number;

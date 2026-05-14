@@ -557,38 +557,6 @@ def handle_error(
         return HTTPException(status_code=500, detail=f"{user_message}: {str(e)}")
 
 
-# ========== OWNERSHIP VALIDATION ==========
-
-async def validate_campaign_ownership(
-    campaign_id: str,
-    company_id: str,
-    db
-) -> dict:
-    """
-    Valida se campanha pertence à empresa.
-    Previne IDOR.
-    
-    Returns:
-        campaign_data dict
-    
-    Raises:
-        HTTPException 404: Campanha não encontrada
-        HTTPException 403: Acesso negado (não é dono)
-    """
-    campaign_data = await db.get_campaign(campaign_id)
-    
-    if not campaign_data:
-        raise HTTPException(status_code=404, detail="Campanha não encontrada")
-    
-    if campaign_data.get("company_id") != company_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Acesso negado. Esta campanha não pertence à sua empresa."
-        )
-    
-    return campaign_data
-
-
 # ========== QUOTA VALIDATION ==========
 
 async def validate_quota_for_action(

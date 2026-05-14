@@ -82,9 +82,7 @@ async def add_security_headers(request: Request, call_next):
 # ==========================================================
 # IMPORT MODULAR ROUTERS
 # ==========================================================
-from routes.whatsapp import router as whatsapp_router
 from routes.leads import router as leads_router
-from routes.campaigns import router as campaigns_router
 from routes.dashboard import router as dashboard_router
 from routes.quotas import router as quotas_router
 from routes.admin import admin_router
@@ -98,16 +96,14 @@ api_router = APIRouter(prefix="/api")
 # Top-level API health and root
 @api_router.get("/")
 async def root():
-    return {"message": "Lead Dispatcher API", "version": "2.2.0", "mode": "Modularized"}
+    return {"message": "Client4you API", "version": "3.0.0", "mode": "Lead Management"}
 
 @api_router.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 # Include domain-specific routes
-api_router.include_router(whatsapp_router)
 api_router.include_router(leads_router)
-api_router.include_router(campaigns_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(quotas_router)
 api_router.include_router(openai_proxy_router)

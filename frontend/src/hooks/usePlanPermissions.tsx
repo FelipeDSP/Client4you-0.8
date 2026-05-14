@@ -7,12 +7,9 @@ export interface PlanPermissions {
   // Funcionalidades
   canSearchLeads: boolean;
   canExportLeads: boolean;
-  canUseDisparador: boolean;
 
   // Limites
   leadsLimit: number; // -1 = ilimitado
-  campaignsLimit: number; // -1 = ilimitado, 0 = bloqueado
-  messagesLimit: number;
 
   // Status
   planType: PlanType;
@@ -29,28 +26,19 @@ const PLAN_PERMISSIONS: Record<PlanType, Omit<PlanPermissions, 'isPlanExpired' |
   basico: {
     canSearchLeads: true,
     canExportLeads: true,
-    canUseDisparador: false,
     leadsLimit: -1,
-    campaignsLimit: 0,
-    messagesLimit: 0,
     planType: 'basico',
   },
   intermediario: {
     canSearchLeads: true,
     canExportLeads: true,
-    canUseDisparador: true,
     leadsLimit: -1,
-    campaignsLimit: -1,
-    messagesLimit: -1,
     planType: 'intermediario',
   },
   suspended: {
     canSearchLeads: false,
     canExportLeads: false,
-    canUseDisparador: false,
     leadsLimit: 0,
-    campaignsLimit: 0,
-    messagesLimit: 0,
     planType: 'suspended',
   },
 };
@@ -151,23 +139,12 @@ export function usePlanPermissions() {
     error,
     refresh,
     // Atalhos úteis
-    canUseFeature: (feature: 'leads' | 'disparador') => {
+    canUseFeature: (feature: 'leads') => {
       if (permissions.isPlanExpired || permissions.isSuspended) return false;
       switch (feature) {
         case 'leads': return permissions.canSearchLeads;
-        case 'disparador': return permissions.canUseDisparador;
         default: return false;
       }
-    },
-    // Verificar se precisa upgrade para uma feature
-    needsUpgradeFor: (feature: 'disparador'): PlanType | null => {
-      if (permissions.isPlanExpired || permissions.isSuspended) return 'basico';
-      switch (feature) {
-        case 'disparador':
-          if (!permissions.canUseDisparador) return 'intermediario';
-          break;
-      }
-      return null;
     },
   };
 }

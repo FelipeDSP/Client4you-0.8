@@ -652,32 +652,7 @@ async def delete_user_completely(
         except Exception as e:
             logger.warning(f"Erro ao deletar user_roles: {e}")
         
-        # 4. Deletar campanhas do usuário (se houver)
-        try:
-            campaigns = db.client.table('campaigns')\
-                .select('id')\
-                .eq('user_id', user_id)\
-                .execute()
-            
-            if campaigns.data:
-                for campaign in campaigns.data:
-                    # Deletar contatos e logs da campanha
-                    db.client.table('campaign_contacts')\
-                        .delete()\
-                        .eq('campaign_id', campaign['id'])\
-                        .execute()
-                    db.client.table('message_logs')\
-                        .delete()\
-                        .eq('campaign_id', campaign['id'])\
-                        .execute()
-                
-                # Deletar campanhas
-                db.client.table('campaigns').delete().eq('user_id', user_id).execute()
-                logger.info(f"✅ Campanhas deletadas para {user_id}")
-        except Exception as e:
-            logger.warning(f"Erro ao deletar campanhas: {e}")
-        
-        # 5. Deletar leads do usuário
+        # 4. Deletar leads do usuário
         try:
             db.client.table('leads').delete().eq('user_id', user_id).execute()
             logger.info(f"✅ Leads deletados para {user_id}")
@@ -823,52 +798,31 @@ async def delete_company(
 ):
     """
     Deleta uma empresa e TODOS os dados relacionados (transacional via service_role).
-    Inclui: campaigns, campaign_contacts, message_logs, leads, search_history,
-    notifications, company_settings, subscriptions, user_quotas,
-    user_roles, profiles, e a empresa em si.
+    Inclui: leads, search_history, notifications, company_settings,
+    subscriptions, user_quotas, user_roles, profiles, e a empresa em si.
     """
     try:
         import asyncio
         db = get_supabase_service()
         audit = get_audit_service()
         client = db.client
-        
+
         # 1. Buscar company name para audit log
         company_result = await asyncio.to_thread(
             client.table('companies').select('name').eq('id', company_id).execute
         )
         company_name = company_result.data[0]['name'] if company_result.data else 'Unknown'
-        
-        # 2. Buscar campaigns da empresa para deletar contacts e logs
-        campaigns_result = await asyncio.to_thread(
-            client.table('campaigns').select('id').eq('company_id', company_id).execute
-        )
-        campaign_ids = [c['id'] for c in (campaigns_result.data or [])]
-        
-        if campaign_ids:
-            # Delete message_logs e campaign_contacts de todas as campanhas
-            for cid in campaign_ids:
-                await asyncio.to_thread(
-                    client.table('message_logs').delete().eq('campaign_id', cid).execute
-                )
-                await asyncio.to_thread(
-                    client.table('campaign_contacts').delete().eq('campaign_id', cid).execute
-                )
-            # Delete campaigns
-            await asyncio.to_thread(
-                client.table('campaigns').delete().eq('company_id', company_id).execute
-            )
-        
-        # 3. Buscar user IDs para limpar roles e quotas
+
+        # 2. Buscar user IDs para limpar roles e quotas
         profiles_result = await asyncio.to_thread(
             client.table('profiles').select('id').eq('company_id', company_id).execute
         )
         user_ids = [p['id'] for p in (profiles_result.data or [])]
-        
-        # 4. Deletar dados na ordem correta (respeitando FKs)
+
+        # 3. Deletar dados na ordem correta (respeitando FKs)
         tables_to_clean = [
             'leads', 'search_history', 'notifications',
-            'company_settings', 'subscriptions', 'ip_whitelist', 'bot_sessions'
+            'company_settings', 'subscriptions', 'ip_whitelist'
         ]
         for table in tables_to_clean:
             try:

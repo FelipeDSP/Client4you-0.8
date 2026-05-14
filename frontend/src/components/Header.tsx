@@ -1,4 +1,4 @@
-import { MapPin, LogOut, User, History, LayoutDashboard, Settings, Crown, Send } from "lucide-react";
+import { MapPin, LogOut, User, History, LayoutDashboard, Settings, Crown } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,6 @@ export function Header() {
   // Build nav items - only show admin when loaded and is admin
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/disparador", label: "Disparador", icon: Send },
     { href: "/history", label: "Histórico", icon: History },
     ...(!isLoadingAdmin && isAdmin ? [{ href: "/admin", label: "Admin", icon: Crown }] : []),
   ];

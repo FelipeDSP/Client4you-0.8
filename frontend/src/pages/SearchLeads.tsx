@@ -4,7 +4,6 @@ import { LeadFilters, LeadFilterState, defaultFilters, filterLeads } from "@/com
 import { LeadTable } from "@/components/LeadTable";
 import { Card } from "@/components/ui/card";
 import { ExportButton } from "@/components/ExportButton";
-import { CreateCampaignFromLeads } from "@/components/CreateCampaignFromLeads";
 import { QuotaLimitModal } from "@/components/QuotaLimitModal";
 import { ConfigurationAlert } from "@/components/ConfigurationAlert";
 import { useLeads } from "@/hooks/useLeads";
@@ -168,7 +167,6 @@ export default function SearchLeads() {
         {currentResults.length > 0 && (
           <div className="flex items-center gap-2">
             <ExportButton leads={filteredLeads} selectedLeads={selectedLeads} />
-            <CreateCampaignFromLeads leads={filteredLeads} selectedLeads={selectedLeads} />
           </div>
         )}
       </div>

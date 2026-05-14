@@ -269,24 +269,14 @@ class EmailService:
         
         return await self.send_email(user_email, subject, html_body, plain_body)
     
-    async def send_campaign_completed(
-        self,
-        user_email: str,
-        user_name: str,
-        campaign_name: str,
-        total_sent: int,
-        total_errors: int,
-        total_contacts: int,
-        campaign_id: str
-    ) -> bool:
+    async def _DEPRECATED_send_campaign_completed_html_template(self) -> str:
         """
-        Envia email quando campanha de WhatsApp termina
+        Template HTML legado de notificação de campanha WhatsApp concluída.
+        Mantido como referência se quisermos reaproveitar o layout para o
+        email de campanha de email concluída (Fase 1). NÃO é chamado por
+        nenhuma rota depois da remoção do WhatsApp.
         """
-        success_rate = (total_sent / total_contacts * 100) if total_contacts > 0 else 0
-        
-        subject = f"✅ Campanha '{campaign_name}' Concluída"
-        
-        html_template = """
+        return """
         <!DOCTYPE html>
         <html>
         <head>
@@ -425,7 +415,7 @@ class EmailService:
                     <p>Você pode visualizar os detalhes completos e logs da campanha na plataforma.</p>
                     
                     <div style="text-align: center;">
-                        <a href="{{ frontend_url }}/disparador" class="button">
+                        <a href="{{ frontend_url }}/dashboard" class="button">
                             Ver Detalhes da Campanha
                         </a>
                     </div>
@@ -444,39 +434,6 @@ class EmailService:
         </body>
         </html>
         """
-        
-        template = self.jinja_env.from_string(html_template)
-        html_body = template.render(
-            user_name=user_name,
-            campaign_name=campaign_name,
-            total_contacts=total_contacts,
-            total_sent=total_sent,
-            total_errors=total_errors,
-            total_pending=total_contacts - total_sent - total_errors,
-            success_rate=f"{success_rate:.1f}",
-            campaign_id=campaign_id,
-            frontend_url=self.frontend_url,
-            current_year=datetime.now().year
-        )
-        
-        plain_body = f"""
-        Olá {user_name},
-        
-        Sua campanha '{campaign_name}' foi concluída!
-        
-        Resultados:
-        - Total de contatos: {total_contacts}
-        - Enviados: {total_sent}
-        - Erros: {total_errors}
-        - Taxa de sucesso: {success_rate:.1f}%
-        
-        Acesse: {self.frontend_url}/disparador
-        
-        Atenciosamente,
-        Equipe Client4You
-        """
-        
-        return await self.send_email(user_email, subject, html_body, plain_body)
 
 
 # Instância global

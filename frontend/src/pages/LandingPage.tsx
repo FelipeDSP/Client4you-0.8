@@ -85,8 +85,8 @@ export default function LandingPage() {
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Plataforma completa para encontrar, contatar e converter clientes em escala.
-            Extrator de leads + Disparador WhatsApp + Automação com IA.
+            Plataforma completa para encontrar, organizar e converter leads em escala.
+            Extrator de leads + Campanhas de Email + Gestão completa.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -149,56 +149,28 @@ export default function LandingPage() {
 
           <Card className="border-2 border-primary shadow-lg">
             <CardHeader>
-              <Badge className="w-fit mb-2">Mais Popular</Badge>
+              <Badge className="w-fit mb-2">Em breve</Badge>
               <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                 <Send className="h-6 w-6 text-primary" />
               </div>
-              <CardTitle>Disparador WhatsApp</CardTitle>
+              <CardTitle>Campanhas de Email</CardTitle>
               <CardDescription>
-                Envie mensagens personalizadas em massa via WhatsApp de forma automatizada.
+                Envie campanhas personalizadas para sua base de leads usando seu próprio SMTP.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
-                  Conexão simplificada via QR Code
+                  Templates com variáveis dinâmicas
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
-                  Mensagens com variáveis dinâmicas
+                  Tracking de abertura e clique
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-green-500" />
-                  Agendamento e controle de horários
-                </li>
-              </ul>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2">
-            <CardHeader>
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <Bot className="h-6 w-6 text-primary" />
-              </div>
-              <CardTitle>Agente IA Personalizado</CardTitle>
-              <CardDescription>
-                Automação inteligente que qualifica leads e responde automaticamente.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  Respostas automáticas inteligentes
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  Qualificação de leads com IA
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  Follow-up automatizado
+                  Lead scoring automático
                 </li>
               </ul>
             </CardContent>
@@ -218,7 +190,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {plans.filter(p => !p.isDemo).map((plan) => {
             const isPopular = plan.id === "intermediario";
             const checkoutLink = CHECKOUT_LINKS[plan.id] || "#pricing";

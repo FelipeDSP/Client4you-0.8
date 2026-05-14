@@ -31,6 +31,10 @@ async def check_quota_endpoint(
     action: str,
     auth_user: dict = Depends(get_authenticated_user)
 ):
+    """
+    Actions suportadas hoje: `search_leads` / `lead_search`.
+    Outras (email-related) entram na Fase 1.
+    """
     try:
         db = get_db()
         result = await db.check_quota(auth_user["user_id"], action)

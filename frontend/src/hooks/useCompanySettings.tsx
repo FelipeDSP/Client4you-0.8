@@ -25,8 +25,6 @@ export interface CompanySettings {
   // Timestamps
   createdAt: string;
   updatedAt: string;
-  // OBS: campos do Agente IA foram movidos para a tabela agent_configs.
-  // Use o hook `useAgentConfig` em vez deste.
 }
 
 

@@ -83,22 +83,6 @@ export const plans: SubscriptionPlan[] = [
       { name: "Suporte prioritário", included: true },
     ],
   },
-  {
-    id: "avancado",
-    name: "Avançado",
-    description: "Solução completa com IA",
-    price: 199.90,
-    leadsLimit: null, // unlimited
-    features: [
-      { name: "Tudo do plano Intermediário", included: true },
-      { name: "Agente de IA Personalizado", included: true, limit: "Em breve" },
-      { name: "Automações avançadas com IA", included: true },
-      { name: "Respostas automáticas inteligentes", included: true },
-      { name: "Múltiplas instâncias WhatsApp", included: true },
-      { name: "API de integração", included: true },
-      { name: "Suporte dedicado", included: true },
-    ],
-  },
 ];
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);

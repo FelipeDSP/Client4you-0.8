@@ -14,8 +14,6 @@ PLAN_NAME_MAP: Dict[str, str] = {
     'basico': 'basico',
     'intermediário': 'intermediario',
     'intermediario': 'intermediario',
-    'avançado': 'avancado',
-    'avancado': 'avancado',
 }
 
 
@@ -41,13 +39,6 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         'campaigns_limit': -1,
         'messages_limit': -1,
         'whatsapp_instances': 1,
-    },
-    'avancado': {
-        'name': 'Plano Avançado',
-        'leads_limit': -1,
-        'campaigns_limit': -1,
-        'messages_limit': -1,
-        'whatsapp_instances': 5,
     },
 }
 

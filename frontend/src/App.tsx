@@ -22,7 +22,6 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Disparador = lazy(() => import("./pages/Disparador"));
-const AgenteIA = lazy(() => import("./pages/AgenteIA"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SearchLeads = lazy(() => import("./pages/SearchLeads"));
@@ -206,16 +205,6 @@ const AppRoutes = () => (
         <ProtectedRoute>
           <MainLayout>
             <Disparador />
-          </MainLayout>
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/agente-ia"
-      element={
-        <ProtectedRoute>
-          <MainLayout>
-            <AgenteIA />
           </MainLayout>
         </ProtectedRoute>
       }

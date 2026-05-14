@@ -1,20 +1,19 @@
 import { useMemo } from "react";
 import { useQuotas } from "./useQuotas";
 
-export type PlanType = 'basico' | 'intermediario' | 'avancado' | 'suspended';
+export type PlanType = 'basico' | 'intermediario' | 'suspended';
 
 export interface PlanPermissions {
   // Funcionalidades
   canSearchLeads: boolean;
   canExportLeads: boolean;
   canUseDisparador: boolean;
-  canUseAgenteIA: boolean;
-  
+
   // Limites
   leadsLimit: number; // -1 = ilimitado
   campaignsLimit: number; // -1 = ilimitado, 0 = bloqueado
   messagesLimit: number;
-  
+
   // Status
   planType: PlanType;
   planName: string;
@@ -25,13 +24,12 @@ export interface PlanPermissions {
   daysUntilExpiration: number | null;
 }
 
-// Configuração de permissões por plano (SEM DEMO)
+// Configuração de permissões por plano
 const PLAN_PERMISSIONS: Record<PlanType, Omit<PlanPermissions, 'isPlanExpired' | 'isSuspended' | 'isActive' | 'expiresAt' | 'daysUntilExpiration' | 'planName'>> = {
   basico: {
     canSearchLeads: true,
     canExportLeads: true,
     canUseDisparador: false,
-    canUseAgenteIA: false,
     leadsLimit: -1,
     campaignsLimit: 0,
     messagesLimit: 0,
@@ -41,27 +39,15 @@ const PLAN_PERMISSIONS: Record<PlanType, Omit<PlanPermissions, 'isPlanExpired' |
     canSearchLeads: true,
     canExportLeads: true,
     canUseDisparador: true,
-    canUseAgenteIA: false,
     leadsLimit: -1,
     campaignsLimit: -1,
     messagesLimit: -1,
     planType: 'intermediario',
   },
-  avancado: {
-    canSearchLeads: true,
-    canExportLeads: true,
-    canUseDisparador: true,
-    canUseAgenteIA: true,
-    leadsLimit: -1,
-    campaignsLimit: -1,
-    messagesLimit: -1,
-    planType: 'avancado',
-  },
   suspended: {
     canSearchLeads: false,
     canExportLeads: false,
     canUseDisparador: false,
-    canUseAgenteIA: false,
     leadsLimit: 0,
     campaignsLimit: 0,
     messagesLimit: 0,
@@ -165,24 +151,20 @@ export function usePlanPermissions() {
     error,
     refresh,
     // Atalhos úteis
-    canUseFeature: (feature: 'leads' | 'disparador' | 'agente') => {
+    canUseFeature: (feature: 'leads' | 'disparador') => {
       if (permissions.isPlanExpired || permissions.isSuspended) return false;
       switch (feature) {
         case 'leads': return permissions.canSearchLeads;
         case 'disparador': return permissions.canUseDisparador;
-        case 'agente': return permissions.canUseAgenteIA;
         default: return false;
       }
     },
     // Verificar se precisa upgrade para uma feature
-    needsUpgradeFor: (feature: 'disparador' | 'agente'): PlanType | null => {
+    needsUpgradeFor: (feature: 'disparador'): PlanType | null => {
       if (permissions.isPlanExpired || permissions.isSuspended) return 'basico';
       switch (feature) {
         case 'disparador':
           if (!permissions.canUseDisparador) return 'intermediario';
-          break;
-        case 'agente':
-          if (!permissions.canUseAgenteIA) return 'avancado';
           break;
       }
       return null;

@@ -73,7 +73,7 @@ import {
   XCircle
 } from "lucide-react";
 
-// Planos do sistema user_quotas (SEM DEMO)
+// Planos disponíveis pra ativação manual via admin
 const QUOTA_PLANS = [
   {
     id: "basico",
@@ -87,13 +87,6 @@ const QUOTA_PLANS = [
     name: "Intermediário",
     description: "Leads + WhatsApp ilimitados",
     color: "green",
-    features: { leads: -1, campaigns: -1, messages: -1 }
-  },
-  {
-    id: "avancado",
-    name: "Avançado",
-    description: "Completo + Agente IA",
-    color: "purple",
     features: { leads: -1, campaigns: -1, messages: -1 }
   },
 ];
@@ -365,7 +358,6 @@ export default function Admin() {
       const planNames: Record<string, string> = {
         basico: "Plano Básico",
         intermediario: "Plano Intermediário",
-        avancado: "Plano Avançado"
       };
 
       const response = await fetch(`/api/admin/users/${userId}/activate`, {

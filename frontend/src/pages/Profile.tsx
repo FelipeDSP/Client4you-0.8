@@ -177,7 +177,6 @@ export default function Profile() {
       case 'demo': return 'bg-slate-500';
       case 'basico': return `bg-blue-900`; // Azul
       case 'intermediario': return `bg-primary`; // Laranja
-      case 'avancado': return 'bg-purple-600';
       default: return `bg-primary`;
     }
   };
@@ -314,15 +313,15 @@ export default function Profile() {
 
         {/* Coluna Direita: Plano e Consumo */}
         <div className="space-y-6">
-          <Card className={`border shadow-sm overflow-hidden ${planType === 'avancado' ? 'border-purple-200' : 'border-slate-200'}`}>
-            <div className={`h-1.5 w-full ${planType === 'basico' ? 'bg-blue-900' : planType === 'intermediario' ? 'bg-primary' : planType === 'avancado' ? 'bg-purple-600' : 'bg-slate-400'}`} />
+          <Card className="border border-slate-200 shadow-sm overflow-hidden">
+            <div className={`h-1.5 w-full ${planType === 'basico' ? 'bg-blue-900' : planType === 'intermediario' ? 'bg-primary' : 'bg-slate-400'}`} />
             <CardHeader className="pb-4 bg-white">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Seu Plano</p>
                   <h3 className="text-2xl font-bold text-slate-900">{planName}</h3>
                 </div>
-                <Badge className={`${planType === 'basico' ? 'bg-blue-900' : planType === 'intermediario' ? 'bg-primary' : planType === 'avancado' ? 'bg-purple-600' : 'bg-slate-500'} text-primary-foreground border-0 capitalize px-3 py-1`}>
+                <Badge className={`${planType === 'basico' ? 'bg-blue-900' : planType === 'intermediario' ? 'bg-primary' : 'bg-slate-500'} text-primary-foreground border-0 capitalize px-3 py-1`}>
                   {planType}
                 </Badge>
               </div>
@@ -370,9 +369,9 @@ export default function Profile() {
                 </div>
               </div>
 
-              {planType !== 'avancado' && (
-                <Button 
-                  className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md border-0 transition-all hover:scale-[1.02]" 
+              {planType !== 'intermediario' && (
+                <Button
+                  className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md border-0 transition-all hover:scale-[1.02]"
                   onClick={() => setShowUpgradeModal(true)}
                 >
                   <Crown className="mr-2 h-4 w-4 text-white/90" />

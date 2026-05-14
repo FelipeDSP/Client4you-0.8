@@ -165,11 +165,7 @@ export function PlanBlockedOverlay({
             
             <p className="text-muted-foreground mb-6 max-w-md">
               {info.description}. Esta funcionalidade está disponível a partir do plano{' '}
-              <strong className={
-                requiredPlan === 'intermediario' ? 'text-orange-600' : 'text-purple-600'
-              }>
-                {requiredPlan === 'intermediario' ? 'Intermediário' : 'Avançado'}
-              </strong>.
+              <strong className="text-orange-600">Intermediário</strong>.
             </p>
 
             <div className="bg-slate-50 p-4 rounded-lg mb-6 text-left w-full max-w-sm border border-slate-200">

@@ -10,7 +10,6 @@ import { useAuth } from "@/hooks/useAuth";
 const CHECKOUT_LINKS: Record<string, string> = {
   basico: "https://pay.kiwify.com.br/FzhyShi",
   intermediario: "https://pay.kiwify.com.br/YlIDqCN",
-  avancado: "https://pay.kiwify.com.br/TnUQl3f"
 };
 
 export default function LandingPage() {
@@ -328,18 +327,7 @@ export default function LandingPage() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                Nos planos Intermediário e Avançado, você conecta seu WhatsApp escaneando um QR Code. É rápido, seguro e não precisa de servidor próprio.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">O Agente de IA está disponível?</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                O Agente de IA personalizado está em desenvolvimento e será lançado em breve exclusivamente no plano Avançado.
+                No plano Intermediário, você conecta seu WhatsApp escaneando um QR Code. É rápido, seguro e não precisa de servidor próprio.
               </p>
             </CardContent>
           </Card>

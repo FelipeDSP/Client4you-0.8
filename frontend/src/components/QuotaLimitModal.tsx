@@ -23,7 +23,6 @@ export function QuotaLimitModal({
   // URLs do Kiwify - Links de pagamento
   const KIWIFY_BASICO_URL = "https://pay.kiwify.com.br/FzhyShi";
   const KIWIFY_INTERMEDIARIO_URL = "https://pay.kiwify.com.br/YlIDqCN";
-  const KIWIFY_AVANCADO_URL = "https://pay.kiwify.com.br/TnUQl3f";
 
   const handleUpgrade = (planUrl: string) => {
     window.open(planUrl, '_blank');
@@ -179,71 +178,6 @@ export function QuotaLimitModal({
             </div>
           </Card>
 
-          {/* PLANO AVANÇADO */}
-          <Card className="relative overflow-hidden border border-purple-200 hover:border-purple-400 hover:shadow-xl transition-all duration-300 bg-gradient-to-b from-purple-50/50 to-white group">
-            <div className="absolute top-0 right-0 bg-purple-600 text-white px-3 py-1 text-[10px] font-bold uppercase rounded-bl-lg shadow-sm">
-              IA Inclusa
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Header */}
-              <div className="text-center space-y-2">
-                <div className="flex items-center justify-center gap-2">
-                  <div className="p-2 rounded-lg bg-purple-100 text-purple-600 group-hover:bg-purple-200 transition-colors">
-                    <Crown className="h-6 w-6" />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">Avançado</h3>
-                </div>
-                <p className="text-sm text-slate-500">Automação Completa</p>
-                <div className="flex items-baseline justify-center gap-1 pt-2">
-                  <span className="text-4xl font-extrabold text-slate-900">R$ 199,90</span>
-                  <span className="text-slate-500 font-medium">/mês</span>
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-full bg-purple-100 p-0.5">
-                    <Check className="h-3 w-3 text-purple-600" />
-                  </div>
-                  <span className="text-slate-700 font-medium">Tudo do plano Intermediário</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-full bg-purple-100 p-0.5">
-                    <Check className="h-3 w-3 text-purple-600" />
-                  </div>
-                  <span className="text-slate-700"><strong>Agente de IA</strong> incluso</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-full bg-purple-100 p-0.5">
-                    <Check className="h-3 w-3 text-purple-600" />
-                  </div>
-                  <span className="text-slate-700">Qualificação automática</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-full bg-purple-100 p-0.5">
-                    <Check className="h-3 w-3 text-purple-600" />
-                  </div>
-                  <span className="text-slate-700">Múltiplos números</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-full bg-purple-100 p-0.5">
-                    <Check className="h-3 w-3 text-purple-600" />
-                  </div>
-                  <span className="text-slate-700">Suporte VIP WhatsApp</span>
-                </div>
-              </div>
-
-              {/* CTA */}
-              <Button 
-                className="w-full h-11 font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-200"
-                onClick={() => handleUpgrade(KIWIFY_AVANCADO_URL)}
-              >
-                Assinar Avançado
-              </Button>
-            </div>
-          </Card>
         </div>
 
         {/* Garantia */}

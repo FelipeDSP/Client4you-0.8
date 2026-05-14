@@ -24,44 +24,6 @@ class SupabaseService:
         
         self.client: Client = create_client(self.url, self.key)
 
-    # ... (dentro da classe SupabaseService)
-
-    async def get_agent_config(self, company_id: str) -> Optional[dict]:
-        """Busca a configuração do agente da empresa"""
-        try:
-            response = self.client.table("agent_configs")\
-                .select("*")\
-                .eq("company_id", company_id)\
-                .single()\
-                .execute()
-            return response.data
-        except Exception as e:
-            # Se não encontrar (erro da API), retorna None
-            # O frontend tratará criando um default
-            return None
-
-    async def upsert_agent_config(self, company_id: str, config_data: dict) -> dict:
-        """Cria ou atualiza a configuração do agente"""
-        try:
-            # Remove campos que não devem ser salvos diretamente se existirem
-            config_data.pop("id", None)
-            config_data.pop("updated_at", None)
-            
-            # Força o company_id
-            config_data["company_id"] = company_id
-            config_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-            response = self.client.table("agent_configs")\
-                .upsert(config_data, on_conflict="company_id")\
-                .execute()
-            
-            if response.data:
-                return response.data[0]
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao salvar config do agente: {e}")
-            return None
-    
     # ========== Waha Configuration (Legacy Support) ==========
     async def get_waha_config(self, company_id: str) -> Optional[Dict[str, Any]]:
         """

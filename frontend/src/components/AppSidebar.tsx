@@ -1,13 +1,12 @@
-import { 
-  LayoutDashboard, 
-  Search, 
-  History, 
-  Settings, 
-  User, 
-  MessageSquare, 
+import {
+  LayoutDashboard,
+  Search,
+  History,
+  Settings,
+  User,
+  MessageSquare,
   LogOut,
   ShieldCheck,
-  Bot,
   Lock,
   Crown
 } from "lucide-react";
@@ -66,14 +65,6 @@ const featureItems = [
     icon: MessageSquare,
     requiredPlan: 'intermediario' as const,
     feature: 'disparador' as const,
-  },
-  {
-    title: "Agente IA",
-    url: "/agente-ia",
-    icon: Bot,
-    requiredPlan: 'avancado' as const,
-    feature: 'agente' as const,
-    badge: "Beta",
   },
 ];
 
@@ -176,7 +167,7 @@ export function AppSidebar() {
                         </TooltipTrigger>
                         {isLocked && (
                           <TooltipContent side="right">
-                            <p>Disponível no plano {item.requiredPlan === 'intermediario' ? 'Intermediário' : 'Avançado'}+</p>
+                            <p>Disponível no plano Intermediário+</p>
                           </TooltipContent>
                         )}
                       </Tooltip>

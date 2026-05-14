@@ -11,7 +11,7 @@ export interface UserQuota {
   id: string;
   user_id: string;
   company_id: string;
-  plan_type: 'basico' | 'intermediario' | 'avancado' | 'suspended';
+  plan_type: 'demo' | 'basico' | 'intermediario' | 'suspended';
   plan_name: string;
   leads_limit: number;
   leads_used: number;

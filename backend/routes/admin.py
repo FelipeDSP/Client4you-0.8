@@ -148,7 +148,7 @@ async def activate_user_account(
             raise HTTPException(status_code=400, detail="Usuário sem company_id — não dá pra ativar")
 
         # Validar plano contra PLAN_LIMITS canônico
-        valid_plans = ['demo', 'basico', 'intermediario', 'avancado']
+        valid_plans = ['demo', 'basico', 'intermediario']
         plan_type = activate_data.plan_type.lower()
         if plan_type not in valid_plans:
             raise HTTPException(
@@ -824,7 +824,7 @@ async def delete_company(
     """
     Deleta uma empresa e TODOS os dados relacionados (transacional via service_role).
     Inclui: campaigns, campaign_contacts, message_logs, leads, search_history,
-    notifications, agent_configs, company_settings, subscriptions, user_quotas,
+    notifications, company_settings, subscriptions, user_quotas,
     user_roles, profiles, e a empresa em si.
     """
     try:
@@ -867,7 +867,7 @@ async def delete_company(
         
         # 4. Deletar dados na ordem correta (respeitando FKs)
         tables_to_clean = [
-            'leads', 'search_history', 'notifications', 'agent_configs',
+            'leads', 'search_history', 'notifications',
             'company_settings', 'subscriptions', 'ip_whitelist', 'bot_sessions'
         ]
         for table in tables_to_clean:

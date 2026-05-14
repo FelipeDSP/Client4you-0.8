@@ -668,7 +668,6 @@ async def validate_quota_for_action(
                 'demo': 'Demo',
                 'basico': 'Básico',
                 'intermediario': 'Intermediário',
-                'avancado': 'Avançado'
             }
             user_plan_display = plan_display_names.get(user_plan_normalized, user_plan_normalized.title())
             required_display = ', '.join([plan_display_names.get(p, p.title()) for p in required_plan_lower])

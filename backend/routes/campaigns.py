@@ -42,7 +42,7 @@ async def create_campaign(
         await validate_quota_for_action(
             user_id=auth_user["user_id"],
             action="create_campaign",
-            required_plan=["intermediario", "avancado"],
+            required_plan=["intermediario"],
             db=db
         )
         
@@ -103,7 +103,7 @@ async def create_campaign_from_leads(
         await validate_quota_for_action(
             user_id=auth_user["user_id"],
             action="create_campaign",
-            required_plan=["intermediario", "avancado"],
+            required_plan=["intermediario"],
             db=db
         )
         
@@ -463,7 +463,7 @@ async def start_campaign(
         await validate_quota_for_action(
             user_id=auth_user["user_id"],
             action="start_campaign",
-            required_plan=["intermediario", "avancado"],
+            required_plan=["intermediario"],
             db=db
         )
         

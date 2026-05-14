@@ -170,7 +170,6 @@ export function AdminUsersTable({
                             <SelectContent>
                               <SelectItem value="basico">Básico (30d)</SelectItem>
                               <SelectItem value="intermediario">Intermediário (30d)</SelectItem>
-                              <SelectItem value="avancado">Avançado (30d)</SelectItem>
                             </SelectContent>
                           </Select>
                         ) : (

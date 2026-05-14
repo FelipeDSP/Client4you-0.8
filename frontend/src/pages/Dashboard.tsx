@@ -60,7 +60,7 @@ export default function Dashboard() {
       <QuotaBar />
 
       {/* Cards de KPI */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-white shadow-sm border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total de Leads</CardTitle>
@@ -68,10 +68,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {isLoadingStats ? (
-              <>
-                <Skeleton className="h-8 w-16 mb-1" />
-                <Skeleton className="h-3 w-24" />
-              </>
+              <Skeleton className="h-8 w-16" />
             ) : (
               <>
                 <div className="text-2xl font-bold text-gray-800">{dashboardStats.total_leads}</div>
@@ -81,52 +78,59 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white shadow-sm border-none opacity-70">
+        <Card className="bg-white shadow-sm border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Campanhas de Email</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Campanhas</CardTitle>
             <Mail className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-400">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Em breve</p>
+            {isLoadingStats ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-gray-800">{dashboardStats.total_campaigns}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {dashboardStats.active_campaigns} ativa(s)
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="bg-white shadow-sm border-none opacity-70">
+        <Card className="bg-white shadow-sm border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Engajamento</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Emails Enviados</CardTitle>
             <TrendingUp className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-400">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Em breve</p>
+            {isLoadingStats ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-gray-800">{dashboardStats.total_messages_sent}</div>
+                <p className="text-xs text-muted-foreground mt-1">Total acumulado</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white shadow-sm border-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Enviados Hoje</CardTitle>
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoadingStats ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-gray-800">{dashboardStats.messages_sent_today}</div>
+                <p className="text-xs text-muted-foreground mt-1">Últimas 24h</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Card informativo sobre evolução */}
-      <Card className="bg-gradient-to-br from-blue-50 to-purple-50 border-blue-100">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-blue-900">
-            <AlertCircle className="h-5 w-5" />
-            Evolução da plataforma
-          </CardTitle>
-          <CardDescription className="text-blue-700">
-            Estamos pivotando de outreach via WhatsApp para email + gestão completa de leads.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-blue-900">
-          <p>
-            <strong>Em breve nesta tela:</strong>
-          </p>
-          <ul className="list-disc list-inside space-y-1 ml-2 text-blue-800">
-            <li>Campanhas de email com tracking de abertura e clique</li>
-            <li>Segmentos e tags pra organizar sua base</li>
-            <li>Lead scoring automático baseado em engajamento</li>
-            <li>Timeline de atividades por lead</li>
-          </ul>
-        </CardContent>
-      </Card>
     </div>
   );
 }

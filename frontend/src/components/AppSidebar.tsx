@@ -7,7 +7,8 @@ import {
   LogOut,
   ShieldCheck,
   Lock,
-  Crown
+  Crown,
+  Mail
 } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -57,6 +58,13 @@ const featureItems = [
     icon: Search,
     requiredPlan: null,
     feature: 'leads' as const,
+  },
+  {
+    title: "Campanhas de Email",
+    url: "/email-campaigns",
+    icon: Mail,
+    requiredPlan: null,
+    feature: 'leads' as const, // mesma permissão por enquanto
   },
 ];
 

@@ -26,23 +26,42 @@ class SupabaseService:
 
     # ========== Dashboard Stats ==========
     async def get_dashboard_stats(self, company_id: str) -> Dict[str, Any]:
-        """
-        Estatísticas do dashboard para a empresa.
-        Após a remoção do WhatsApp, os campos de campanhas/mensagens
-        retornam zero. Serão reativados na Fase 1 (email campaigns).
-        """
-        # Total leads (count only, no data transfer)
+        """Estatísticas do dashboard — agregado de email campaigns."""
+        # Total leads
         leads_result = self.client.table('leads')\
             .select('id', count='exact')\
             .eq('company_id', company_id)\
             .execute()
         total_leads = leads_result.count or 0
 
-        # Placeholders — vão ser preenchidos com email campaigns na Fase 1
-        total_campaigns = 0
-        active_campaigns = 0
-        total_sent = 0
+        # Total + active email campaigns
+        campaigns_result = self.client.table('email_campaigns')\
+            .select('id, sent_count, opened_count, clicked_count', count='exact')\
+            .eq('company_id', company_id)\
+            .execute()
+        total_campaigns = campaigns_result.count or 0
+        campaigns_data = campaigns_result.data or []
+        total_sent = sum(c.get('sent_count', 0) for c in campaigns_data)
+
+        active_result = self.client.table('email_campaigns')\
+            .select('id', count='exact')\
+            .eq('company_id', company_id)\
+            .eq('status', 'sending')\
+            .execute()
+        active_campaigns = active_result.count or 0
+
+        # Emails enviados hoje (via email_events filtrado pelos campaign_ids dessa empresa)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        campaign_ids = [c['id'] for c in campaigns_data if c.get('id')]
         messages_today = 0
+        if campaign_ids:
+            today_result = self.client.table('email_events')\
+                .select('id', count='exact')\
+                .in_('campaign_id', campaign_ids)\
+                .eq('event_type', 'sent')\
+                .gte('occurred_at', today)\
+                .execute()
+            messages_today = today_result.count or 0
 
         return {
             "total_leads": total_leads,

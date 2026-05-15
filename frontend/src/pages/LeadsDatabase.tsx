@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Trash2,
   Loader2,
+  Plus,
 } from "lucide-react";
 import { LeadFilters, defaultFilters, filterLeads, LeadFilterState } from "@/components/LeadFilters";
 import { LeadTable } from "@/components/LeadTable";
@@ -17,6 +18,8 @@ import { ExportButton } from "@/components/ExportButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,8 +31,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useLeads } from "@/hooks/useLeads";
 import { usePageTitle } from "@/contexts/PageTitleContext";
+import { useToast } from "@/hooks/use-toast";
 
 const LEADS_PER_PAGE = 25;
 
@@ -46,12 +58,45 @@ export default function LeadsDatabase() {
     setPageTitle("Base de Leads", Database);
   }, [setPageTitle]);
 
-  const { leads, isLoading, deleteLead, clearAllLeads } = useLeads();
+  const { leads, isLoading, deleteLead, clearAllLeads, addManualLead, isAddingManualLead } = useLeads();
+  const { toast } = useToast();
 
   const [filters, setFilters] = useState<LeadFilterState>(defaultFilters);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newLead, setNewLead] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    category: "",
+    address: "",
+    website: "",
+    hasWhatsApp: false,
+  });
+
+  const resetNewLead = () =>
+    setNewLead({ name: "", email: "", phone: "", category: "", address: "", website: "", hasWhatsApp: false });
+
+  const handleAddLead = async () => {
+    if (!newLead.name.trim()) {
+      toast({ variant: "destructive", title: "Nome obrigatório", description: "Informe pelo menos o nome do lead." });
+      return;
+    }
+    try {
+      await addManualLead(newLead);
+      toast({ title: "Lead adicionado", description: `${newLead.name} entrou na sua base.` });
+      setShowAddDialog(false);
+      resetNewLead();
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao adicionar",
+        description: (e as Error).message || "Tente de novo.",
+      });
+    }
+  };
 
   // Filter combinado: search + filters
   const filtered = useMemo(() => {
@@ -112,34 +157,41 @@ export default function LeadsDatabase() {
           </p>
         </div>
 
-        {leads.length > 0 && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" className="gap-2 text-red-600 hover:text-red-700 border-red-200">
-                <Trash2 className="h-4 w-4" />
-                Limpar base
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Apagar TODOS os leads?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta ação é permanente. Vai apagar {leads.length} leads e não pode ser desfeita.
-                  Considere exportar antes.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleClearAll}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Apagar tudo
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowAddDialog(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Adicionar lead
+          </Button>
+
+          {leads.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="gap-2 text-red-600 hover:text-red-700 border-red-200">
+                  <Trash2 className="h-4 w-4" />
+                  Limpar base
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Apagar TODOS os leads?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação é permanente. Vai apagar {leads.length} leads e não pode ser desfeita.
+                    Considere exportar antes.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleClearAll}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Apagar tudo
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       {/* Stats grid */}
@@ -232,6 +284,120 @@ export default function LeadsDatabase() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog: adicionar lead manualmente */}
+      <Dialog
+        open={showAddDialog}
+        onOpenChange={(open) => {
+          setShowAddDialog(open);
+          if (!open) resetNewLead();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar lead manualmente</DialogTitle>
+            <DialogDescription>
+              Cadastre um lead que você conseguiu fora do extrator (indicação, evento, networking).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="lead-name">Nome *</Label>
+              <Input
+                id="lead-name"
+                placeholder="João da Silva ou Empresa LTDA"
+                value={newLead.name}
+                onChange={(e) => setNewLead((s) => ({ ...s, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="lead-email">Email</Label>
+                <Input
+                  id="lead-email"
+                  type="email"
+                  placeholder="contato@empresa.com"
+                  value={newLead.email}
+                  onChange={(e) => setNewLead((s) => ({ ...s, email: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lead-phone">Telefone</Label>
+                <Input
+                  id="lead-phone"
+                  placeholder="(11) 99999-9999"
+                  value={newLead.phone}
+                  onChange={(e) => setNewLead((s) => ({ ...s, phone: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="lead-category">Categoria</Label>
+              <Input
+                id="lead-category"
+                placeholder="Restaurante, advocacia, e-commerce..."
+                value={newLead.category}
+                onChange={(e) => setNewLead((s) => ({ ...s, category: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="lead-website">Site</Label>
+              <Input
+                id="lead-website"
+                placeholder="https://empresa.com"
+                value={newLead.website}
+                onChange={(e) => setNewLead((s) => ({ ...s, website: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="lead-address">Endereço</Label>
+              <Input
+                id="lead-address"
+                placeholder="Rua X, 123, São Paulo - SP"
+                value={newLead.address}
+                onChange={(e) => setNewLead((s) => ({ ...s, address: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label className="text-sm">Tem WhatsApp?</Label>
+                <p className="text-xs text-muted-foreground">
+                  Marque se você sabe que o telefone tem WhatsApp ativo.
+                </p>
+              </div>
+              <Switch
+                checked={newLead.hasWhatsApp}
+                onCheckedChange={(v) => setNewLead((s) => ({ ...s, hasWhatsApp: v }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isAddingManualLead}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAddLead} disabled={isAddingManualLead || !newLead.name.trim()}>
+              {isAddingManualLead ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Salvar lead
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Paginação */}
       {filtered.length > LEADS_PER_PAGE && (

@@ -222,6 +222,63 @@ export function useLeads() {
     },
   });
 
+  // --- 5. MUTATION: Adicionar lead manualmente ---
+  const addManualLeadMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      email?: string;
+      phone?: string;
+      website?: string;
+      address?: string;
+      category?: string;
+      hasWhatsApp?: boolean;
+    }) => {
+      if (!user?.companyId) throw new Error("Sem empresa associada");
+      const phoneClean = payload.phone ? payload.phone.replace(/\D/g, "") : null;
+      const { data, error } = await supabase
+        .from("leads")
+        .insert({
+          company_id: user.companyId,
+          name: payload.name.trim(),
+          email: payload.email?.trim() || null,
+          phone: phoneClean || null,
+          website: payload.website?.trim() || null,
+          address: payload.address?.trim() || null,
+          category: payload.category?.trim() || null,
+          has_whatsapp: !!payload.hasWhatsApp,
+          has_email: !!payload.email?.trim(),
+        } as any)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      // Adiciona o lead no topo do cache local sem refetch
+      queryClient.setQueryData(["leads", user?.companyId], (old: Lead[] = []) => [
+        {
+          id: data.id,
+          name: data.name,
+          phone: data.phone || "",
+          hasWhatsApp: data.has_whatsapp || false,
+          email: data.email,
+          hasEmail: data.has_email || false,
+          address: data.address || "",
+          city: "",
+          state: "",
+          rating: Number(data.rating) || 0,
+          reviews: data.reviews_count || 0,
+          category: data.category || "",
+          website: data.website,
+          extractedAt: data.created_at,
+          searchId: data.search_id || undefined,
+          companyId: data.company_id,
+        } as Lead,
+        ...old,
+      ]);
+    },
+  });
+
   // --- 6. Outras Actions (Delete, Clear) ---
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -313,8 +370,10 @@ export function useLeads() {
     isSearching,
     isLoading: isLoadingLeads,
     isEnrichingEmails: enrichEmailsMutation.isPending,
+    isAddingManualLead: addManualLeadMutation.isPending,
     searchLeads,
     enrichEmails,
+    addManualLead: addManualLeadMutation.mutateAsync,
     deleteLead: (id: string) => deleteLeadMutation.mutate(id),
     clearAllLeads: () => clearAllLeadsMutation.mutate(),
     getLeadsBySearchId: (searchId: string) => leads.filter((l) => l.searchId === searchId),

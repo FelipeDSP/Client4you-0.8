@@ -22,6 +22,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Admin = lazy(() => import("./pages/Admin"));
 const EmailCampaigns = lazy(() => import("./pages/EmailCampaigns"));
+const LeadsDatabase = lazy(() => import("./pages/LeadsDatabase"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SearchLeads = lazy(() => import("./pages/SearchLeads"));
@@ -164,7 +165,7 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <MainLayout>
-            <SearchLeads />
+            <LeadsDatabase />
           </MainLayout>
         </ProtectedRoute>
       }

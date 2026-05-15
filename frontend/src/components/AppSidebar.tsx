@@ -8,7 +8,8 @@ import {
   ShieldCheck,
   Lock,
   Crown,
-  Mail
+  Mail,
+  Database
 } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,6 +57,13 @@ const featureItems = [
     title: "Buscar Leads",
     url: "/search",
     icon: Search,
+    requiredPlan: null,
+    feature: 'leads' as const,
+  },
+  {
+    title: "Base de Leads",
+    url: "/leads",
+    icon: Database,
     requiredPlan: null,
     feature: 'leads' as const,
   },

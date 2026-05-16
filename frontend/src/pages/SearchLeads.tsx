@@ -145,9 +145,10 @@ export default function SearchLeads() {
     }
   };
 
-  // Pivot email-first: só leads com email aparecem nos resultados
-  const resultsWithEmail = currentResults.filter(l => l.email);
-  const filteredLeads = filterLeads(resultsWithEmail, filters);
+  // Mostra TODOS os leads (com ou sem email). O enrichment via Firecrawl
+  // popula o campo email quando consegue extrair do website; a coluna fica
+  // vazia pros que não tem.
+  const filteredLeads = filterLeads(currentResults, filters);
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
   const paginatedLeads = filteredLeads.slice(
@@ -166,7 +167,7 @@ export default function SearchLeads() {
           </p>
         </div>
 
-        {resultsWithEmail.length > 0 && (
+        {currentResults.length > 0 && (
           <div className="flex items-center gap-2">
             <ExportButton leads={filteredLeads} selectedLeads={selectedLeads} />
           </div>
@@ -185,10 +186,10 @@ export default function SearchLeads() {
             disabled={!hasSerpApi}
           />
 
-          {hasSearched && resultsWithEmail.length > 0 && (
+          {hasSearched && currentResults.length > 0 && (
             <div className="animate-in fade-in slide-in-from-top-4 duration-500">
               <LeadFilters
-                leads={resultsWithEmail}
+                leads={currentResults}
                 filters={filters}
                 onFiltersChange={setFilters}
               />
@@ -197,7 +198,7 @@ export default function SearchLeads() {
         </div>
       </Card>
 
-      {hasSearched && (resultsWithEmail.length > 0 || isBusy) && (
+      {hasSearched && (currentResults.length > 0 || isBusy) && (
         <Card className="p-6 bg-white shadow-sm border-none rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
 
           {/* Header */}
@@ -290,13 +291,9 @@ export default function SearchLeads() {
         </Card>
       )}
 
-      {hasSearched && !isBusy && resultsWithEmail.length === 0 && (
+      {hasSearched && !isBusy && currentResults.length === 0 && (
         <Card className="p-12 bg-white shadow-sm border-none rounded-xl text-center">
-          <p className="text-muted-foreground">
-            {currentResults.length === 0
-              ? "Nenhum lead encontrado."
-              : `Encontramos ${currentResults.length} leads, mas nenhum com email válido. Tente outra busca ou termo mais específico.`}
-          </p>
+          <p className="text-muted-foreground">Nenhum lead encontrado.</p>
         </Card>
       )}
 

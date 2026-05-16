@@ -9,9 +9,6 @@ export interface CompanySettings {
   companyId: string;
   // Integrações
   serpapiKey: string | null;
-  wahaApiUrl: string | null;
-  wahaApiKey: string | null;
-  wahaSession: string | null;
   // Geral
   timezone: string;
   // Timestamps
@@ -44,9 +41,6 @@ function mapSettingsData(raw: Record<string, unknown>, companyId: string, timezo
     companyId: (raw.company_id as string) || companyId,
     // Integrações
     serpapiKey: (raw.serpapi_key as string) || null,
-    wahaApiUrl: (raw.waha_api_url as string) || null,
-    wahaApiKey: (raw.waha_api_key as string) || null,
-    wahaSession: (raw.waha_session as string) || null,
     // Geral
     timezone,
     // Timestamps
@@ -227,7 +221,6 @@ export function useCompanySettings() {
   };
 
   const hasSerpapiKey = Boolean(settings?.serpapiKey);
-  const hasWahaConfig = Boolean(settings?.wahaApiUrl && settings?.wahaApiKey);
 
   return {
     settings,
@@ -235,7 +228,6 @@ export function useCompanySettings() {
     isSaving,
     saveSettings,
     hasSerpapiKey,
-    hasWahaConfig,
     refreshSettings: () => fetchSettings(true),
   };
 }

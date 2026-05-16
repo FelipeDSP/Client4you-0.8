@@ -16,6 +16,7 @@ export interface Lead {
   extractedAt: string;
   searchId?: string;
   companyId?: string;
+  savedAt?: string | null;
   
   // Nova arquitetura v2 - Deduplicação e rastreamento
   fingerprint?: string;

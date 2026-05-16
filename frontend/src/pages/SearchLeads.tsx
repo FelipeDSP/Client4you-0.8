@@ -11,7 +11,7 @@ import { useQuotas } from "@/hooks/useQuotas";
 import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { Lead } from "@/types";
-import { Search, ArrowDown, Loader2, Mail, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ArrowDown, Loader2, Mail, ChevronLeft, ChevronRight, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
@@ -40,8 +40,27 @@ export default function SearchLeads() {
   const { isLoading: isLoadingSettings, hasSerpapiKey, refreshSettings } = useCompanySettings();
   const hasSerpApi = hasSerpapiKey;
 
-  const { deleteLead, searchLeads, enrichEmails } = useLeads();
+  const { deleteLead, searchLeads, enrichEmails, saveLeadsToBase, isSavingToBase } = useLeads();
   const { toast } = useToast();
+
+  const handleSaveToBase = async () => {
+    if (selectedLeads.length === 0) return;
+    try {
+      const result = await saveLeadsToBase(selectedLeads);
+      toast({
+        title: "Adicionados à Base de Leads",
+        description: `${result.saved} lead(s) salvos. Vá em Base de Leads para visualizar.`,
+        className: "border-l-4 border-green-500",
+      });
+      setSelectedLeads([]);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar",
+        description: (e as Error).message || "Tente novamente.",
+      });
+    }
+  };
 
   useEffect(() => {
     refreshSettings();
@@ -169,6 +188,20 @@ export default function SearchLeads() {
 
         {currentResults.length > 0 && (
           <div className="flex items-center gap-2">
+            {selectedLeads.length > 0 && (
+              <Button
+                onClick={handleSaveToBase}
+                disabled={isSavingToBase}
+                className="gap-2 bg-green-600 hover:bg-green-700"
+              >
+                {isSavingToBase ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Database className="h-4 w-4" />
+                )}
+                Salvar na Base ({selectedLeads.length})
+              </Button>
+            )}
             <ExportButton leads={filteredLeads} selectedLeads={selectedLeads} />
           </div>
         )}

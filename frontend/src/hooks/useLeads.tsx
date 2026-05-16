@@ -18,27 +18,27 @@ export function useLeads() {
   const queryClient = useQueryClient();
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- 1. QUERY: Buscar Leads (Com Cache Infinito para economizar) ---
+  // --- 1. QUERY: Base de Leads (só os marcados com saved_at) ---
   const { data: leads = [], isLoading: isLoadingLeads } = useQuery({
     queryKey: ['leads', user?.companyId],
     queryFn: async () => {
       if (!user?.companyId) return [];
-      
-      // Defense-in-depth: filtra explicitamente por company_id em vez de
-      // depender apenas do RLS do Supabase. Se a policy falhar, ainda
-      // assim nenhum dado de outra empresa é retornado.
+
+      // Só leads SALVOS pelo usuário (saved_at preenchido). Os resultados
+      // transitórios de busca (saved_at NULL) ficam fora da Base.
       const { data, error } = await supabase
         .from("leads")
         .select("*")
         .eq("company_id", user.companyId)
-        .order("created_at", { ascending: false });
+        .not("saved_at", "is", null)
+        .order("saved_at", { ascending: false });
 
       if (error) {
         console.error("Error fetching leads:", error);
         throw error;
       }
 
-      return (data || []).map((lead) => ({
+      return (data || []).map((lead: any) => ({
         id: lead.id,
         name: lead.name,
         phone: lead.phone || "",
@@ -55,6 +55,7 @@ export function useLeads() {
         extractedAt: lead.created_at,
         searchId: lead.search_id || undefined,
         companyId: lead.company_id,
+        savedAt: lead.saved_at,
       }));
     },
     enabled: !!user?.companyId,
@@ -222,7 +223,7 @@ export function useLeads() {
     },
   });
 
-  // --- 5. MUTATION: Adicionar lead manualmente ---
+  // --- 5. MUTATION: Adicionar lead manualmente (vai direto pra Base) ---
   const addManualLeadMutation = useMutation({
     mutationFn: async (payload: {
       name: string;
@@ -247,6 +248,7 @@ export function useLeads() {
           category: payload.category?.trim() || null,
           has_whatsapp: !!payload.hasWhatsApp,
           has_email: !!payload.email?.trim(),
+          saved_at: new Date().toISOString(),
         } as any)
         .select()
         .single();
@@ -279,11 +281,30 @@ export function useLeads() {
     },
   });
 
-  // --- 6. Outras Actions (Delete, Clear) ---
+  // --- 6. MUTATION: Salvar leads na Base de Leads ---
+  const saveLeadsToBaseMutation = useMutation({
+    mutationFn: async (leadIds: string[]) => {
+      if (!user?.companyId || leadIds.length === 0) return { saved: 0 };
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase
+        .from("leads")
+        .update({ saved_at: nowIso } as any)
+        .in("id", leadIds)
+        .eq("company_id", user.companyId)
+        .is("saved_at", null);
+      if (error) throw error;
+      return { saved: leadIds.length };
+    },
+    onSuccess: () => {
+      // Invalida a Base — refetch traz os recém-salvos
+      queryClient.invalidateQueries({ queryKey: ['leads', user?.companyId] });
+    },
+  });
+
+  // --- 7. Outras Actions (Delete, Clear) ---
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => {
       if (!user?.companyId) throw new Error("Sem empresa associada");
-      // Defense-in-depth: garante que o lead pertence à empresa do usuário.
       const { error } = await supabase
         .from("leads")
         .delete()
@@ -297,10 +318,15 @@ export function useLeads() {
     }
   });
 
+  // "Limpar base" só apaga os SALVOS, não os resultados transitórios de busca.
   const clearAllLeadsMutation = useMutation({
     mutationFn: async () => {
       if (!user?.companyId) return;
-      const { error } = await supabase.from("leads").delete().eq("company_id", user.companyId);
+      const { error } = await supabase
+        .from("leads")
+        .delete()
+        .eq("company_id", user.companyId)
+        .not("saved_at", "is", null);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -308,16 +334,19 @@ export function useLeads() {
     }
   });
 
+  // Deletar um item de histórico: só apaga search_history (FK ON DELETE SET
+  // NULL nos leads salvos preserva eles na Base). Os transitórios da search
+  // também caem porque ninguém referencia mais.
   const deleteSearchHistoryMutation = useMutation({
     mutationFn: async (searchId: string) => {
       if (!user?.companyId) throw new Error("Sem empresa associada");
-      // Defense-in-depth: filtra por company_id em ambos os deletes para
-      // que um search_id forjado de outra empresa não delete dados alheios.
+      // Apaga leads transitórios (não salvos) dessa busca explicitamente
       await supabase
         .from("leads")
         .delete()
         .eq("search_id", searchId)
-        .eq("company_id", user.companyId);
+        .eq("company_id", user.companyId)
+        .is("saved_at", null);
       await supabase
         .from("search_history")
         .delete()
@@ -327,18 +356,24 @@ export function useLeads() {
     },
     onSuccess: (searchId) => {
       queryClient.setQueryData(['searchHistory', user?.companyId], (old: SearchHistory[] = []) => old.filter(h => h.id !== searchId));
-      queryClient.setQueryData(['leads', user?.companyId], (old: Lead[] = []) => old.filter(l => l.searchId !== searchId));
     }
   });
 
+  // Limpar todo o histórico: apaga search_history + leads NÃO salvos
   const clearAllHistoryMutation = useMutation({
     mutationFn: async () => {
       if (!user?.companyId) return;
-      await supabase.from("leads").delete().eq("company_id", user.companyId);
-      await supabase.from("search_history").delete().eq("company_id", user.companyId);
+      await supabase
+        .from("leads")
+        .delete()
+        .eq("company_id", user.companyId)
+        .is("saved_at", null);
+      await supabase
+        .from("search_history")
+        .delete()
+        .eq("company_id", user.companyId);
     },
     onSuccess: () => {
-      queryClient.setQueryData(['leads', user?.companyId], []);
       queryClient.setQueryData(['searchHistory', user?.companyId], []);
     }
   });
@@ -371,9 +406,11 @@ export function useLeads() {
     isLoading: isLoadingLeads,
     isEnrichingEmails: enrichEmailsMutation.isPending,
     isAddingManualLead: addManualLeadMutation.isPending,
+    isSavingToBase: saveLeadsToBaseMutation.isPending,
     searchLeads,
     enrichEmails,
     addManualLead: addManualLeadMutation.mutateAsync,
+    saveLeadsToBase: saveLeadsToBaseMutation.mutateAsync,
     deleteLead: (id: string) => deleteLeadMutation.mutate(id),
     clearAllLeads: () => clearAllLeadsMutation.mutate(),
     getLeadsBySearchId: (searchId: string) => leads.filter((l) => l.searchId === searchId),

@@ -85,7 +85,7 @@ const QUOTA_PLANS = [
   {
     id: "intermediario",
     name: "Intermediário",
-    description: "Leads + WhatsApp ilimitados",
+    description: "Leads + campanhas de email ilimitadas",
     color: "green",
     features: { leads: -1, campaigns: -1, messages: -1 }
   },
@@ -181,7 +181,7 @@ export default function Admin() {
   // Edit quota dialog
   const [showEditQuotaDialog, setShowEditQuotaDialog] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editQuotaPlan, setEditQuotaPlan] = useState("plan_sender");
+  const [editQuotaPlan, setEditQuotaPlan] = useState("basico");
   const [editLeadsLimit, setEditLeadsLimit] = useState("-1");
   const [editCampaignsLimit, setEditCampaignsLimit] = useState("-1");
   const [editMessagesLimit, setEditMessagesLimit] = useState("-1");

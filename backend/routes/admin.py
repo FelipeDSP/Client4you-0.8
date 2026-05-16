@@ -652,14 +652,11 @@ async def delete_user_completely(
         except Exception as e:
             logger.warning(f"Erro ao deletar user_roles: {e}")
         
-        # 4. Deletar leads do usuário
-        try:
-            db.client.table('leads').delete().eq('user_id', user_id).execute()
-            logger.info(f"✅ Leads deletados para {user_id}")
-        except Exception as e:
-            logger.warning(f"Erro ao deletar leads: {e}")
-        
-        # 6. Deletar histórico de busca
+        # Leads pertencem à EMPRESA, não ao usuário. Não há FK user→leads,
+        # então nada a deletar aqui. Se for o último membro da empresa, o admin
+        # deve usar delete_company para fazer cleanup completo.
+
+        # Deletar histórico de busca
         try:
             db.client.table('search_history').delete().eq('user_id', user_id).execute()
             logger.info(f"✅ Histórico de busca deletado para {user_id}")
@@ -672,7 +669,15 @@ async def delete_user_completely(
             logger.info(f"✅ Notificações deletadas para {user_id}")
         except Exception as e:
             logger.warning(f"Erro ao deletar notificações: {e}")
-        
+
+        # 7b. Email cleanup (campanhas ANTES de contas — FK email_account_id é RESTRICT)
+        try:
+            db.client.table('email_campaigns').delete().eq('user_id', user_id).execute()
+            db.client.table('email_accounts').delete().eq('user_id', user_id).execute()
+            logger.info(f"✅ Email accounts/campaigns deletados para {user_id}")
+        except Exception as e:
+            logger.warning(f"Erro ao deletar email_* do user: {e}")
+
         # 8. Deletar profile
         db.client.table('profiles').delete().eq('id', user_id).execute()
         logger.info(f"✅ Profile deletado para {user_id}")
@@ -819,7 +824,31 @@ async def delete_company(
         )
         user_ids = [p['id'] for p in (profiles_result.data or [])]
 
-        # 3. Deletar dados na ordem correta (respeitando FKs)
+        # 3. Email cleanup — ordem importa pelos FKs (sem CASCADE no schema):
+        #    email_events → email_campaign_recipients → email_campaigns → email_accounts
+        try:
+            # Pegar todos campaign_ids da company para limpar events/recipients
+            camps_res = await asyncio.to_thread(
+                client.table('email_campaigns').select('id').eq('company_id', company_id).execute
+            )
+            campaign_ids = [c['id'] for c in (camps_res.data or [])]
+            if campaign_ids:
+                await asyncio.to_thread(
+                    client.table('email_events').delete().in_('campaign_id', campaign_ids).execute
+                )
+                await asyncio.to_thread(
+                    client.table('email_campaign_recipients').delete().in_('campaign_id', campaign_ids).execute
+                )
+            await asyncio.to_thread(
+                client.table('email_campaigns').delete().eq('company_id', company_id).execute
+            )
+            await asyncio.to_thread(
+                client.table('email_accounts').delete().eq('company_id', company_id).execute
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao limpar email_* da company {company_id}: {e}")
+
+        # 4. Deletar dados na ordem correta (respeitando FKs)
         tables_to_clean = [
             'leads', 'search_history', 'notifications',
             'company_settings', 'subscriptions', 'ip_whitelist'
@@ -869,19 +898,17 @@ async def delete_company(
             details={
                 'company_name': company_name,
                 'users_affected': len(user_ids),
-                'campaigns_deleted': len(campaign_ids)
             },
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get('user-agent')
         )
-        
+
         logger.info(f"✅ Empresa {company_name} ({company_id}) deletada por {auth_user['email']}")
         return {
             "success": True,
             "message": f"Empresa {company_name} e todos os dados deletados",
             "details": {
                 "users_removed": len(user_ids),
-                "campaigns_removed": len(campaign_ids)
             }
         }
     except HTTPException:

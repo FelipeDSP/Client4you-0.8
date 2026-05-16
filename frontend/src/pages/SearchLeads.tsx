@@ -145,7 +145,9 @@ export default function SearchLeads() {
     }
   };
 
-  const filteredLeads = filterLeads(currentResults, filters);
+  // Pivot email-first: só leads com email aparecem nos resultados
+  const resultsWithEmail = currentResults.filter(l => l.email);
+  const filteredLeads = filterLeads(resultsWithEmail, filters);
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
   const paginatedLeads = filteredLeads.slice(
@@ -164,7 +166,7 @@ export default function SearchLeads() {
           </p>
         </div>
 
-        {currentResults.length > 0 && (
+        {resultsWithEmail.length > 0 && (
           <div className="flex items-center gap-2">
             <ExportButton leads={filteredLeads} selectedLeads={selectedLeads} />
           </div>
@@ -183,10 +185,10 @@ export default function SearchLeads() {
             disabled={!hasSerpApi}
           />
 
-          {hasSearched && (
+          {hasSearched && resultsWithEmail.length > 0 && (
             <div className="animate-in fade-in slide-in-from-top-4 duration-500">
               <LeadFilters
-                leads={currentResults}
+                leads={resultsWithEmail}
                 filters={filters}
                 onFiltersChange={setFilters}
               />
@@ -195,7 +197,7 @@ export default function SearchLeads() {
         </div>
       </Card>
 
-      {hasSearched && (
+      {hasSearched && (resultsWithEmail.length > 0 || isBusy) && (
         <Card className="p-6 bg-white shadow-sm border-none rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
 
           {/* Header */}
@@ -288,9 +290,13 @@ export default function SearchLeads() {
         </Card>
       )}
 
-      {hasSearched && currentResults.length === 0 && !isBusy && (
+      {hasSearched && !isBusy && resultsWithEmail.length === 0 && (
         <Card className="p-12 bg-white shadow-sm border-none rounded-xl text-center">
-          <p className="text-muted-foreground">Nenhum lead encontrado.</p>
+          <p className="text-muted-foreground">
+            {currentResults.length === 0
+              ? "Nenhum lead encontrado."
+              : `Encontramos ${currentResults.length} leads, mas nenhum com email válido. Tente outra busca ou termo mais específico.`}
+          </p>
         </Card>
       )}
 

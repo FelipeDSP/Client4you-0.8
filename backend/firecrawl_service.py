@@ -36,17 +36,29 @@ async def extract_emails_from_website(url: str, client: httpx.AsyncClient) -> li
                 json={"url": page_url, "formats": ["markdown"]},
                 timeout=20,
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                # Log do erro real do Firecrawl (rate limit, key inválida, etc.)
+                logger.warning(
+                    f"Firecrawl {resp.status_code} para {page_url}: {resp.text[:300]}"
+                )
+                resp.raise_for_status()
             data = resp.json()
             markdown = (
                 data.get("data", {}).get("markdown", "")
                 or data.get("markdown", "")
             )
             found = EMAIL_RE.findall(markdown)
+            logger.info(
+                f"Firecrawl {page_url}: markdown={len(markdown)} chars, "
+                f"emails encontrados={len(found)}"
+            )
             if found:
                 return found  # Para na primeira página com resultado
+        except httpx.HTTPStatusError:
+            # Já logado acima
+            continue
         except Exception as e:
-            logger.debug(f"Firecrawl scrape error for {page_url}: {e}")
+            logger.warning(f"Firecrawl scrape error for {page_url}: {type(e).__name__}: {e}")
 
     return []
 
@@ -58,6 +70,15 @@ async def extract_emails_bulk(leads: list[dict], concurrency: int = 5) -> dict[s
     """
     api_key = os.getenv("FIRECRAWL_API_KEY")
     if not api_key:
+        logger.error("FIRECRAWL_API_KEY ausente — enrichment desabilitado")
+        return {}
+
+    leads_with_site = [l for l in leads if l.get("website")]
+    logger.info(
+        f"Firecrawl: processando {len(leads_with_site)}/{len(leads)} leads "
+        f"(os outros não têm website)"
+    )
+    if not leads_with_site:
         return {}
 
     semaphore = asyncio.Semaphore(concurrency)
@@ -74,8 +95,12 @@ async def extract_emails_bulk(leads: list[dict], concurrency: int = 5) -> dict[s
                     if emails:
                         results[lead["id"]] = emails[0]
                 except Exception as e:
-                    logger.warning(f"Failed to enrich lead {lead['id']}: {e}")
+                    logger.warning(f"Failed to enrich lead {lead['id']}: {type(e).__name__}: {e}")
 
-        await asyncio.gather(*(process_lead(l) for l in leads))
+        await asyncio.gather(*(process_lead(l) for l in leads_with_site))
 
+    logger.info(
+        f"Firecrawl concluído: {len(results)}/{len(leads_with_site)} "
+        f"leads enriquecidos com email"
+    )
     return results

@@ -94,18 +94,34 @@ async def admin_reauth(
     Requer senha para confirmar identidade antes de acessar painel admin
     """
     try:
-        db = get_supabase_service()
-        
-        # Tentar autenticar com Supabase
+        # CRÍTICO: usar um cliente ISOLADO pro sign_in. Se usássemos
+        # db.client (service_role compartilhado), o sign_in trocaria o
+        # auth state do singleton e TODAS as chamadas seguintes passariam
+        # a usar o JWT do usuário (sujeito a RLS) em vez de service_role.
+        # Isso quebra audit_logs.insert(), user_quotas.upsert() etc.
+        import os
+        from supabase import create_client
+        supabase_url = os.environ.get('SUPABASE_URL')
+        supabase_anon = os.environ.get('SUPABASE_KEY')
+        reauth_client = create_client(supabase_url, supabase_anon)
+
+        # Tentar autenticar com cliente isolado
         try:
-            result = db.client.auth.sign_in_with_password({
+            result = reauth_client.auth.sign_in_with_password({
                 "email": auth_user['email'],
                 "password": data.password
             })
-            
+
             if not result.user:
                 raise Exception("Senha incorreta")
-        
+
+            # Encerra a sessão criada (não precisamos mais — o token original
+            # do user continua válido). Falha silenciosa se já expirou.
+            try:
+                reauth_client.auth.sign_out()
+            except Exception:
+                pass
+
         except Exception as e:
             logger.warning(f"❌ Re-autenticação falhou para {auth_user['email']}: {e}")
             

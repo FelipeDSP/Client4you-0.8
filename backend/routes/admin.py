@@ -169,16 +169,27 @@ async def activate_user_account(
             'updated_at': now.isoformat(),
         }, on_conflict='company_id').execute()
 
-        # user_quotas (apenas contadores zerados)
-        db.client.table('user_quotas').upsert({
-            'user_id': user_id,
-            'company_id': company_id,
-            'leads_used': 0,
-            'campaigns_used': 0,
-            'messages_sent': 0,
-            'updated_at': now.isoformat(),
-        }, on_conflict='user_id').execute()
-        
+        # user_quotas: garante que existe (não zera contadores se já existe)
+        existing_q = db.client.table('user_quotas')\
+            .select('id')\
+            .eq('user_id', user_id)\
+            .maybe_single()\
+            .execute()
+        if not (existing_q and existing_q.data):
+            db.client.table('user_quotas').insert({
+                'user_id': user_id,
+                'company_id': company_id,
+                'leads_used': 0,
+                'campaigns_used': 0,
+                'messages_sent': 0,
+                'updated_at': now.isoformat(),
+            }).execute()
+        else:
+            db.client.table('user_quotas')\
+                .update({'company_id': company_id, 'updated_at': now.isoformat()})\
+                .eq('user_id', user_id)\
+                .execute()
+
         # Log de auditoria
         await audit.log_action(
             user_id=auth_user['user_id'],
@@ -535,15 +546,26 @@ async def update_user_quota(
             'updated_at': now.isoformat(),
         }, on_conflict='company_id').execute()
 
-        # Garante user_quotas (contadores zerados se for novo usuário)
-        result = db.client.table('user_quotas').upsert({
-            'user_id': user_id,
-            'company_id': company_id,
-            'leads_used': 0,
-            'campaigns_used': 0,
-            'messages_sent': 0,
-            'updated_at': now.isoformat(),
-        }, on_conflict='user_id').execute()
+        # Garante user_quotas: insere zerado SÓ se não existir (preserva contadores)
+        existing_q = db.client.table('user_quotas')\
+            .select('id')\
+            .eq('user_id', user_id)\
+            .maybe_single()\
+            .execute()
+        if not (existing_q and existing_q.data):
+            result = db.client.table('user_quotas').insert({
+                'user_id': user_id,
+                'company_id': company_id,
+                'leads_used': 0,
+                'campaigns_used': 0,
+                'messages_sent': 0,
+                'updated_at': now.isoformat(),
+            }).execute()
+        else:
+            result = db.client.table('user_quotas')\
+                .update({'company_id': company_id, 'updated_at': now.isoformat()})\
+                .eq('user_id', user_id)\
+                .execute()
 
         quota_dict = {
             'user_id': user_id,

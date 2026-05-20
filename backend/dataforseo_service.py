@@ -89,18 +89,41 @@ async def search_google_maps(query: str, location: str, depth: int) -> list[dict
                 },
                 json=payload,
             )
-        data = resp.json()
     except Exception as e:
         logger.error(f"DataForSEO fetch falhou: {type(e).__name__}: {e}")
+        raise DataForSEOError("Serviço de busca temporariamente indisponível")
+
+    # HTTP 401/403 = auth/acesso recusado pelo DataForSEO (credenciais erradas,
+    # conta sem saldo, ou IP fora do whitelist). É problema de configuração nosso.
+    if resp.status_code in (401, 403):
+        logger.error(
+            f"DataForSEO recusou ({resp.status_code}). "
+            f"Verifique DATAFORSEO_LOGIN/PASSWORD (use as credenciais de API, não o login do site), "
+            f"saldo da conta e IP whitelist. Body: {resp.text[:300]}"
+        )
+        raise DataForSEOError("Erro de configuração do serviço de busca", configuration=True)
+
+    try:
+        data = resp.json()
+    except Exception:
+        logger.error(f"DataForSEO resposta não-JSON ({resp.status_code}): {resp.text[:300]}")
+        raise DataForSEOError("Serviço de busca temporariamente indisponível")
+
+    # Erros de auth/conta também podem vir no NÍVEL RAIZ (não em tasks[]).
+    top_code = data.get("status_code")
+    if top_code is not None and top_code != 20000:
+        logger.error(f"DataForSEO erro raiz: {data.get('status_message')} (code={top_code})")
+        # 401xx = auth, 402xx = pagamento/saldo → configuração
+        if 40100 <= top_code < 40300:
+            raise DataForSEOError("Erro de configuração do serviço de busca", configuration=True)
         raise DataForSEOError("Serviço de busca temporariamente indisponível")
 
     task = (data.get("tasks") or [None])[0]
     if not task or task.get("status_code") != 20000:
         msg = (task or {}).get("status_message", "Erro desconhecido")
         code = (task or {}).get("status_code")
-        logger.error(f"DataForSEO erro: {msg} (code={code})")
-        # 40101 = credenciais inválidas → problema de configuração nosso
-        if code == 40101:
+        logger.error(f"DataForSEO erro na task: {msg} (code={code})")
+        if code in (40100, 40101, 40200, 40210):
             raise DataForSEOError("Erro de configuração do serviço de busca", configuration=True)
         raise DataForSEOError("Serviço de busca temporariamente indisponível")
 

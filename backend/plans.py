@@ -18,27 +18,34 @@ PLAN_NAME_MAP: Dict[str, str] = {
 
 
 # Limites por plano. -1 = ilimitado, 0 = não disponível.
+#
+# IMPORTANTE (modelo DataForSEO, pago-por-uso):
+#   leads_limit conta LEADS extraídos/mês — não buscas. O backend incrementa
+#   `leads_used` pelo nº de leads realmente inseridos e capa a profundidade da
+#   busca pela quota restante. Por isso `leads_limit` NÃO deve ser -1 (ilimitado
+#   = prejuízo garantido com API paga por resultado). A cobrança do DataForSEO
+#   é por página de 100 resultados, então mantenha múltiplos de 100.
 PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
     'demo': {
         'name': 'Demo',
-        'leads_limit': 5,
+        'leads_limit': 50,
         'campaigns_limit': 1,
         'messages_limit': 50,
-        'whatsapp_instances': 1,
+        'whatsapp_instances': 0,
     },
     'basico': {
         'name': 'Plano Básico',
-        'leads_limit': -1,
+        'leads_limit': 500,
         'campaigns_limit': 0,
         'messages_limit': 0,
         'whatsapp_instances': 0,
     },
     'intermediario': {
         'name': 'Plano Intermediário',
-        'leads_limit': -1,
+        'leads_limit': 2000,
         'campaigns_limit': -1,
         'messages_limit': -1,
-        'whatsapp_instances': 1,
+        'whatsapp_instances': 0,
     },
 }
 

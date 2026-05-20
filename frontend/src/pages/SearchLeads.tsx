@@ -5,10 +5,8 @@ import { LeadTable } from "@/components/LeadTable";
 import { Card } from "@/components/ui/card";
 import { ExportButton } from "@/components/ExportButton";
 import { QuotaLimitModal } from "@/components/QuotaLimitModal";
-import { ConfigurationAlert } from "@/components/ConfigurationAlert";
 import { useLeads } from "@/hooks/useLeads";
 import { useQuotas } from "@/hooks/useQuotas";
-import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { Lead } from "@/types";
 import { Search, ArrowDown, Loader2, Mail, ChevronLeft, ChevronRight, Database } from "lucide-react";
@@ -34,11 +32,8 @@ export default function SearchLeads() {
   const [filters, setFilters] = useState<LeadFilterState>(defaultFilters);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
 
-  const { quota, checkQuota, incrementQuota } = useQuotas();
+  const { quota, checkQuota, refresh: refreshQuota } = useQuotas();
   const [showQuotaModal, setShowQuotaModal] = useState(false);
-
-  const { isLoading: isLoadingSettings, hasSerpapiKey, refreshSettings } = useCompanySettings();
-  const hasSerpApi = hasSerpapiKey;
 
   const { deleteLead, searchLeads, enrichEmails, saveLeadsToBase, isSavingToBase } = useLeads();
   const { toast } = useToast();
@@ -61,10 +56,6 @@ export default function SearchLeads() {
       });
     }
   };
-
-  useEffect(() => {
-    refreshSettings();
-  }, []);
 
   // Volta para página 1 quando filtros mudam
   useEffect(() => {
@@ -97,6 +88,8 @@ export default function SearchLeads() {
   };
 
   const handleSearch = async (term: string, location: string, limit: number | null) => {
+    // Pré-flight de UX: mostra o modal de limite antes de bater no servidor.
+    // O enforcement REAL acontece no backend (não dá pra burlar pelo cliente).
     const quotaCheck = await checkQuota('lead_search');
     if (!quotaCheck.allowed) {
       setShowQuotaModal(true);
@@ -110,45 +103,17 @@ export default function SearchLeads() {
     setFetchStatus("Buscando...");
 
     try {
-      const allLeads: Lead[] = [];
-      const seenIds = new Set<string>();
-      let start = 0;
-      let searchId: string | undefined = undefined;
-      let page = 1;
+      // Chamada única — o DataForSEO retorna tudo de uma vez (até o teto que o
+      // backend deriva da quota restante).
+      const result = await searchLeads(term, location, limit);
+      const leads = result?.leads || [];
+      setCurrentResults(leads);
 
-      while (true) {
-        // Para se atingiu o limite definido pelo usuário
-        if (limit && allLeads.length >= limit) break;
+      // O backend já incrementou a quota pelo nº de leads. Sincroniza o cache.
+      refreshQuota();
 
-        setFetchStatus(`Buscando página ${page}... (${allLeads.length} leads)`);
-
-        const result = await searchLeads(term, location, start, searchId);
-        if (!result || result.leads.length === 0) break;
-
-        searchId = result.searchId;
-
-        for (const lead of result.leads) {
-          if (!seenIds.has(lead.id)) {
-            // Respeita o limite na hora de acumular
-            if (limit && allLeads.length >= limit) break;
-            seenIds.add(lead.id);
-            allLeads.push(lead);
-          }
-        }
-
-        // Atualiza a tabela em tempo real
-        setCurrentResults([...allLeads]);
-
-        if (!result.hasMore) break;
-
-        start += result.leads.length;
-        page++;
-      }
-
-      await incrementQuota('lead_search');
-
-      setFetchStatus(`Extraindo e-mails de ${allLeads.filter(l => l.website).length} sites...`);
-      const enriched = await autoEnrichEmails(allLeads);
+      setFetchStatus(`Extraindo e-mails de ${leads.filter(l => l.website).length} sites...`);
+      const enriched = await autoEnrichEmails(leads);
       setCurrentResults(enriched);
 
       const emailCount = enriched.filter(l => l.email).length;
@@ -157,6 +122,15 @@ export default function SearchLeads() {
         description: `${enriched.length} leads encontrados${emailCount > 0 ? `. ${emailCount} com e-mail.` : "."}`,
         className: "border-l-4 border-green-500",
       });
+    } catch (e) {
+      const msg = (e as Error).message || "Tente novamente.";
+      // Limite estourado no servidor → abre o modal de upgrade
+      if (/limite/i.test(msg)) {
+        setShowQuotaModal(true);
+      } else {
+        toast({ variant: "destructive", title: "Erro na busca", description: msg });
+      }
+      refreshQuota();
     } finally {
       setIsProcessing(false);
       setIsEnrichingPage(false);
@@ -207,16 +181,11 @@ export default function SearchLeads() {
         )}
       </div>
 
-      {!isLoadingSettings && !hasSerpApi && (
-        <ConfigurationAlert type="serp" />
-      )}
-
       <Card className="p-6 bg-white shadow-sm border-none rounded-xl">
         <div className="space-y-6">
           <LeadSearch
             onSearch={handleSearch}
             isSearching={isBusy}
-            disabled={!hasSerpApi}
           />
 
           {hasSearched && currentResults.length > 0 && (
@@ -332,11 +301,7 @@ export default function SearchLeads() {
 
       <QuotaLimitModal
         open={showQuotaModal}
-        onClose={() => setShowQuotaModal(false)}
-        limitType="leads"
-        currentPlan={quota?.plan_type || 'demo'}
-        used={quota?.leads_used || 0}
-        limit={quota?.leads_limit || 0}
+        onOpenChange={setShowQuotaModal}
       />
     </div>
   );

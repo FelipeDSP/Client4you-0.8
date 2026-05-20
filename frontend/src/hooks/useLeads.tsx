@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Lead, SearchHistory } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { makeAuthenticatedRequest } from "@/lib/api";
+
+const API_URL = import.meta.env.VITE_BACKEND_URL || "";
 
 export interface SearchResult {
   leads: Lead[];
@@ -98,94 +101,48 @@ export function useLeads() {
     staleTime: 1000 * 60 * 5, // 5 minutos de cache para histórico
   });
 
-  // --- 3. MUTATION: Buscar Leads (Ação Pesada) ---
+  // --- 3. MUTATION: Buscar Leads (server-side via backend FastAPI) ---
+  // O backend chama o DataForSEO, aplica a quota no servidor (não dá pra
+  // burlar pelo cliente), insere os leads como transitórios (saved_at NULL) e
+  // devolve os leads já mapeados. Sem paginação: o DataForSEO retorna tudo
+  // numa chamada só, então hasMore é sempre false.
   const searchMutation = useMutation({
-    mutationFn: async ({ query, location, start = 0, existingSearchId }: { query: string, location: string, start?: number, existingSearchId?: string }): Promise<SearchResult | null> => {
+    mutationFn: async ({ query, location, limit, existingSearchId }: { query: string, location: string, limit?: number | null, existingSearchId?: string }): Promise<SearchResult | null> => {
       if (!user?.companyId) return null;
-      
-      let searchId = existingSearchId;
 
-      // 1. Criar histórico se não existir
-      if (!searchId) {
-        const { data: historyData, error: historyError } = await supabase
-          .from("search_history")
-          .insert({
-            query,
-            location,
-            results_count: 0,
-            company_id: user.companyId,
-            user_id: user.id,
-          })
-          .select()
-          .single();
-
-        if (historyError) throw historyError;
-        searchId = historyData.id;
-      }
-
-      // 2. Chamar Edge Function
-      const { data: { session } } = await supabase.auth.getSession();
-      const { data, error } = await supabase.functions.invoke("search-leads", {
-        body: { query, location, companyId: user.companyId, searchId, start },
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+      const response = await makeAuthenticatedRequest(`${API_URL}/api/leads/search`, {
+        method: "POST",
+        body: JSON.stringify({
+          query,
+          location,
+          limit: limit ?? null,
+          search_id: existingSearchId ?? null,
+        }),
       });
 
-      if (error || data?.error) throw error || new Error(data?.error);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Erro ${response.status} na busca`);
+      }
 
-      // 3. Buscar APENAS os novos leads criados (economiza banda).
-      // Defense-in-depth: search_id já restringe, mas adiciona company_id
-      // explicitamente para o caso de search_ids colidirem entre empresas.
-      const { data: newLeadsData, error: newLeadsError } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("search_id", searchId)
-        .eq("company_id", user.companyId)
-        .order("created_at", { ascending: false })
-        .limit(data?.count || 20);
+      const data = await response.json();
 
-      if (newLeadsError) throw newLeadsError;
-
-      const newLeadsMapped: Lead[] = (newLeadsData || []).map((lead) => ({
-        id: lead.id,
-        name: lead.name,
-        phone: lead.phone || "",
-        hasWhatsApp: lead.has_whatsapp || false,
-        email: lead.email,
-        hasEmail: lead.has_email || false,
-        address: lead.address || "",
-        city: "",
-        state: "",
-        rating: Number(lead.rating) || 0,
-        reviews: lead.reviews_count || 0,
-        category: lead.category || "",
-        website: lead.website,
-        extractedAt: lead.created_at,
-        searchId: lead.search_id || undefined,
-        companyId: lead.company_id,
-      }));
+      // O backend já devolve os leads no shape do TS Lead.
+      const newLeadsMapped: Lead[] = (data.leads || []) as Lead[];
 
       return {
         leads: newLeadsMapped,
-        hasMore: data?.hasMore || false,
-        nextStart: data?.nextStart || 0,
-        searchId: searchId!,
+        hasMore: false,
+        nextStart: 0,
+        searchId: data.searchId,
         query,
         location,
       };
     },
-    onSuccess: (data) => {
-      if (data?.leads) {
-        // Atualiza o cache de LEADS adicionando os novos no topo
-        queryClient.setQueryData(['leads', user?.companyId], (oldLeads: Lead[] = []) => {
-          // Filtra duplicatas caso existam por segurança e adiciona novos
-          const newIds = new Set(data.leads.map(l => l.id));
-          const filteredOld = oldLeads.filter(l => !newIds.has(l.id));
-          return [...data.leads, ...filteredOld];
-        });
-
-        // Invalida histórico para atualizar contagem
-        queryClient.invalidateQueries({ queryKey: ['searchHistory'] });
-      }
+    onSuccess: () => {
+      // Resultados de busca são transitórios (não entram na Base de Leads).
+      // Só invalida o histórico pra refletir a nova busca/contagem.
+      queryClient.invalidateQueries({ queryKey: ['searchHistory'] });
     },
     onError: (error) => {
       console.error("Erro na busca:", error);
@@ -380,13 +337,14 @@ export function useLeads() {
 
   // --- Wrapper Functions ---
 
-  const searchLeads = async (query: string, location: string, start: number = 0, existingSearchId?: string) => {
+  const searchLeads = async (query: string, location: string, limit?: number | null, existingSearchId?: string) => {
     setIsSearching(true);
     try {
-      const result = await searchMutation.mutateAsync({ query, location, start, existingSearchId });
+      const result = await searchMutation.mutateAsync({ query, location, limit, existingSearchId });
       return result;
     } catch (e) {
-      return null;
+      // Propaga pra UI poder mostrar o motivo (quota, config, etc.)
+      throw e;
     } finally {
       setIsSearching(false);
     }

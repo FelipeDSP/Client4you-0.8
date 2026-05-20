@@ -39,7 +39,6 @@ import {
   PlugZap,
   ShieldCheck,
 } from "lucide-react";
-import { useCompanySettings } from "@/hooks/useCompanySettings";
 import { useEmailAccounts, EmailAccount, CreateEmailAccountPayload } from "@/hooks/useEmailAccounts";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/contexts/PageTitleContext";
@@ -96,31 +95,7 @@ export default function Settings() {
     setPageTitle("Configurações", SettingsIcon);
   }, [setPageTitle]);
 
-  const { settings, saveSettings, hasSerpapiKey, isSaving } = useCompanySettings();
   const { toast } = useToast();
-
-  // ─── SERP API ──
-  const [serpapiKey, setSerpapiKey] = useState("");
-  const [isSavingSerp, setIsSavingSerp] = useState(false);
-  useEffect(() => {
-    if (settings?.serpapiKey) setSerpapiKey(settings.serpapiKey);
-  }, [settings]);
-
-  const handleSaveSerpapiKey = async () => {
-    if (!serpapiKey.trim()) {
-      toast({ variant: "destructive", title: "Campo obrigatório", description: "Insira uma chave válida." });
-      return;
-    }
-    setIsSavingSerp(true);
-    try {
-      const ok = await saveSettings({ serpapiKey: serpapiKey.trim() });
-      if (ok) toast({ title: "Chave salva", description: "SERP API configurada com sucesso." });
-    } catch {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar." });
-    } finally {
-      setIsSavingSerp(false);
-    }
-  };
 
   // ─── Email Accounts ──
   const {
@@ -275,53 +250,27 @@ export default function Settings() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${hasSerpapiKey ? "bg-green-100" : "bg-orange-100"}`}>
-                    <Globe className={`h-5 w-5 ${hasSerpapiKey ? "text-green-600" : "text-orange-600"}`} />
+                  <div className="p-2 rounded-lg bg-green-100">
+                    <Globe className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
-                    <CardTitle>SERP API</CardTitle>
-                    <CardDescription>Integração para buscar leads no Google Maps</CardDescription>
+                    <CardTitle>Busca de Leads</CardTitle>
+                    <CardDescription>Extração de leads no Google Maps</CardDescription>
                   </div>
                 </div>
-                <Badge className={hasSerpapiKey ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}>
-                  {hasSerpapiKey ? "Configurado" : "Pendente"}
-                </Badge>
+                <Badge className="bg-green-100 text-green-700">Gerenciado pela plataforma</Badge>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="serpapi-key">Chave da API</Label>
-                <Input
-                  id="serpapi-key"
-                  type="password"
-                  placeholder="Cole sua chave SERP API aqui"
-                  value={serpapiKey}
-                  onChange={(e) => setSerpapiKey(e.target.value)}
-                  disabled={isSavingSerp || isSaving}
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Obtenha em:{" "}
-                  <a
-                    href="https://serpapi.com/manage-api-key"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    serpapi.com/manage-api-key
-                  </a>
-                </p>
-              </div>
-              <Button onClick={handleSaveSerpapiKey} disabled={isSavingSerp || !serpapiKey.trim()}>
-                {isSavingSerp ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  "Salvar chave"
-                )}
-              </Button>
+            <CardContent>
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>Nenhuma configuração necessária</AlertTitle>
+                <AlertDescription className="text-sm leading-relaxed">
+                  A busca de leads é gerenciada pela plataforma — você não precisa
+                  configurar nenhuma chave de API. É só ir em <strong>Buscar Leads</strong> e
+                  pesquisar. A quantidade de leads disponível depende do seu plano.
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
         </TabsContent>

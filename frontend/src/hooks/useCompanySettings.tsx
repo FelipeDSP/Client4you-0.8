@@ -7,8 +7,6 @@ import { COMPANY_SETTINGS_DEFAULTS, COMPANY_SETTINGS_FIELD_MAP } from "@/lib/def
 export interface CompanySettings {
   id: string;
   companyId: string;
-  // Integrações
-  serpapiKey: string | null;
   // Geral
   timezone: string;
   // Timestamps
@@ -39,8 +37,6 @@ function mapSettingsData(raw: Record<string, unknown>, companyId: string, timezo
   return {
     id: (raw.id as string) || "",
     companyId: (raw.company_id as string) || companyId,
-    // Integrações
-    serpapiKey: (raw.serpapi_key as string) || null,
     // Geral
     timezone,
     // Timestamps
@@ -220,14 +216,11 @@ export function useCompanySettings() {
     }
   };
 
-  const hasSerpapiKey = Boolean(settings?.serpapiKey);
-
   return {
     settings,
     isLoading,
     isSaving,
     saveSettings,
-    hasSerpapiKey,
     refreshSettings: () => fetchSettings(true),
   };
 }

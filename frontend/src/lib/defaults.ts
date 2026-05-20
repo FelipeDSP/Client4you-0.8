@@ -9,8 +9,6 @@ import { CompanySettings } from "@/hooks/useCompanySettings";
 export const COMPANY_SETTINGS_DEFAULTS: Partial<CompanySettings> = {};
 
 // Mapeamento camelCase → snake_case para persistência no Supabase.
-// company_settings só tem serpapi_key na DB atual — colunas waha_* foram
-// removidas no migration v3 quando o feature WhatsApp foi descontinuado.
-export const COMPANY_SETTINGS_FIELD_MAP: Record<string, string> = {
-  serpapiKey: 'serpapi_key',
-};
+// A busca de leads passou a ser gerenciada como infraestrutura (DataForSEO via
+// env vars no backend), então não há mais chave de API por empresa pra salvar.
+export const COMPANY_SETTINGS_FIELD_MAP: Record<string, string> = {};

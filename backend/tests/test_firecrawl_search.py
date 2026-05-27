@@ -163,3 +163,35 @@ async def test_accepts_domain_field_as_fallback():
     result = await p.find_email({"domain": "empresa.com.br"})
     assert result is not None
     assert result.email == "info@empresa.com.br"
+
+
+# ─── PR 3: extracted_cnpjs ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_extracts_cnpjs_from_search_results():
+    """CNPJ no markdown dos resultados → vai pro extracted_cnpjs."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "data": [
+                    {
+                        "url": "https://empresa.com.br/contato",
+                        "markdown": "contato@empresa.com.br CNPJ 11.222.333/0001-81",
+                    },
+                    {
+                        "url": "https://empresa.com.br/sobre",
+                        "markdown": "Filial: 33.000.167/0001-01",
+                    },
+                ],
+            },
+        )
+
+    p = FirecrawlSearchProvider(client=_make_client(handler))
+    result = await p.find_email({"website": "https://empresa.com.br"})
+    assert result is not None
+    assert result.email == "contato@empresa.com.br"
+    assert "11222333000181" in result.extracted_cnpjs
+    assert "33000167000101" in result.extracted_cnpjs

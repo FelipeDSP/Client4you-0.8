@@ -243,3 +243,91 @@ async def test_disabled_via_env(monkeypatch):
     monkeypatch.setenv("ENABLE_FIRECRAWL_MAP_SCRAPE_PROVIDER", "false")
     p = FirecrawlMapScrapeProvider()
     assert await p.find_email({"website": "https://x.com"}) is None
+
+
+# ─── PR 3: extracted_cnpjs ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_extracts_cnpjs_from_scraped_markdown():
+    """CNPJ no markdown de qualquer página raspada → vai pro extracted_cnpjs."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if "/map" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "links": [
+                        "https://empresa.com.br/contato",
+                        "https://empresa.com.br/sobre",
+                    ],
+                },
+            )
+        if "/scrape" in url:
+            import json as _json
+            body = _json.loads(req.content.decode())
+            if "contato" in body["url"]:
+                # 1ª página: email + CNPJ
+                return httpx.Response(
+                    200,
+                    json={
+                        "success": True,
+                        "data": {
+                            "markdown": (
+                                "Email: vendas@empresa.com.br\n"
+                                "CNPJ 11.222.333/0001-81"
+                            )
+                        },
+                    },
+                )
+            # 2ª página: CNPJ duplicado (dedup) + outro CNPJ
+            return httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "data": {
+                        "markdown": (
+                            "Matriz CNPJ 11222333000181 — "
+                            "Filial 33.000.167/0001-01"
+                        )
+                    },
+                },
+            )
+        return httpx.Response(404)
+
+    p = FirecrawlMapScrapeProvider(client=_make_client(handler))
+    result = await p.find_email({"website": "https://empresa.com.br"})
+    assert result is not None
+    # Early stop pode acionar na 1ª página (vendas@empresa.com.br tem score alto).
+    # Confirma que pelo menos o CNPJ da 1ª página foi capturado.
+    assert "11222333000181" in result.extracted_cnpjs
+
+
+@pytest.mark.asyncio
+async def test_extracted_cnpjs_when_no_email_found():
+    """Sem email em nenhuma página, mas com CNPJ → ainda devolve cnpjs."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if "/map" in url:
+            return httpx.Response(
+                200,
+                json={"success": True, "links": ["https://empresa.com.br/contato"]},
+            )
+        if "/scrape" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "data": {
+                        "markdown": "Use o formulário. CNPJ 11.222.333/0001-81"
+                    },
+                },
+            )
+        return httpx.Response(404)
+
+    p = FirecrawlMapScrapeProvider(client=_make_client(handler))
+    result = await p.find_email({"website": "https://empresa.com.br"})
+    assert result is not None
+    assert result.email is None
+    assert result.extracted_cnpjs == ["11222333000181"]

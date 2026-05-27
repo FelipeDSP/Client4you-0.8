@@ -12,6 +12,7 @@ from typing import Optional
 
 import httpx
 
+from ..cnpj_utils import extract_cnpjs
 from .base import EmailProvider, EmailResult
 from .validators import extract_emails, pick_best_email
 
@@ -110,6 +111,7 @@ class FirecrawlMapScrapeProvider(EmailProvider):
 
             # ─── 3) Scrape sequencial com early stop ─────────────────────
             all_emails: list[str] = []
+            all_cnpjs: list[str] = []  # side-channel pra orchestrator persistir
             for u in top_urls:
                 try:
                     s_resp = await client.post(
@@ -129,6 +131,10 @@ class FirecrawlMapScrapeProvider(EmailProvider):
                     or data.get("markdown", "")
                 )
                 all_emails.extend(extract_emails(md))
+                # CNPJs validados achados no rodapé/contato — vão pro side-channel
+                for c in extract_cnpjs(md, validate=True):
+                    if c not in all_cnpjs:
+                        all_cnpjs.append(c)
 
                 # Early stop: se já temos um email de alta confiança, para
                 best_so_far = pick_best_email(all_emails, lead)
@@ -137,17 +143,21 @@ class FirecrawlMapScrapeProvider(EmailProvider):
                     return EmailResult(
                         email=email, source=self.name, confidence=score,
                         cost_usd=self.cost_per_call,
+                        extracted_cnpjs=all_cnpjs,
                     )
 
             best = pick_best_email(all_emails, lead)
             if not best:
                 return EmailResult(
-                    email=None, source=self.name, confidence=0.0, cost_usd=self.cost_per_call,
+                    email=None, source=self.name, confidence=0.0,
+                    cost_usd=self.cost_per_call,
+                    extracted_cnpjs=all_cnpjs,
                 )
             email, score = best
             return EmailResult(
                 email=email, source=self.name, confidence=score,
                 cost_usd=self.cost_per_call,
+                extracted_cnpjs=all_cnpjs,
             )
         finally:
             if owns_client:

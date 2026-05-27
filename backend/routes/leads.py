@@ -1,11 +1,12 @@
 import logging
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request, Depends, HTTPException
 from security_utils import get_authenticated_user, handle_error
 from helpers import get_db
 from firecrawl_service import extract_emails_bulk
 from dataforseo_service import search_google_maps, DataForSEOError, MAX_DEPTH
+from services.cnpj_utils import normalize_cnpj
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -180,6 +181,47 @@ async def search_leads(
         "used": leads_used + len(mapped),
         "limit": leads_limit,
     }
+
+
+class UpdateCnpjRequest(BaseModel):
+    # Aceita formatos `12.345.678/0001-90` (18 chars) e `12345678000190` (14).
+    cnpj: str = Field(..., min_length=14, max_length=18)
+
+
+@router.post("/{lead_id}/cnpj")
+async def update_lead_cnpj(
+    lead_id: str,
+    payload: UpdateCnpjRequest,
+    auth_user: dict = Depends(get_authenticated_user),
+):
+    """Atualiza CNPJ do lead manualmente. Valida dígito verificador.
+
+    Multi-tenant: só atualiza se o lead pertence à mesma company. Habilita
+    o ReceitaFederalProvider numa próxima enrichment.
+    """
+    company_id = auth_user.get("company_id")
+    if not company_id:
+        raise HTTPException(status_code=403, detail="Usuário sem empresa associada")
+
+    digits = normalize_cnpj(payload.cnpj)
+    if not digits:
+        raise HTTPException(
+            status_code=400,
+            detail="CNPJ inválido — verifique o formato e os dígitos verificadores",
+        )
+
+    db = get_db()
+    result = (
+        db.client.table("leads")
+        .update({"cnpj": digits})
+        .eq("id", lead_id)
+        .eq("company_id", company_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    return {"id": lead_id, "cnpj": digits}
 
 
 @router.post("/enrich-emails")

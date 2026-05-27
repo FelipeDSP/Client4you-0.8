@@ -76,11 +76,15 @@ DATAFORSEO_BASE_URL=https://api.dataforseo.com/v3
 ```bash
 # Cada provider pode ser desligado individualmente sem deploy de código
 ENABLE_DATAFORSEO_CONTACT_URL_PROVIDER=true
+ENABLE_RECEITA_FEDERAL_PROVIDER=true
 ENABLE_FIRECRAWL_SEARCH_PROVIDER=true
 ENABLE_FIRECRAWL_MAP_SCRAPE_PROVIDER=true
 
 # Firecrawl base URL (raramente muda — só pra testes contra instância self-hosted)
 FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v1
+
+# BrasilAPI base URL (mirror/teste — raramente muda)
+BRASIL_API_CNPJ_BASE=https://brasilapi.com.br/api/cnpj/v1
 ```
 
 ---

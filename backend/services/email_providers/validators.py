@@ -55,9 +55,6 @@ EMAIL_RE = re.compile(
 # Heurística "nome.sobrenome" — provável email pessoal (penaliza).
 PERSONAL_LOCAL_RE = re.compile(r"^[a-z]{2,}\.[a-z]{2,}$")
 
-# CNPJ com ou sem máscara (14 dígitos).
-CNPJ_RE = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b")
-
 # ─── Padrões de ofuscação ─────────────────────────────────────────────────
 # Brackets/parens: aceita PT e EN ("at"/"arroba", "dot"/"ponto").
 _OBF_AT_BRACKETED = re.compile(
@@ -169,23 +166,9 @@ def extract_emails(text: Optional[str]) -> list[str]:
     return result
 
 
-def extract_cnpjs(text: Optional[str]) -> list[str]:
-    """Extrai CNPJs (só dígitos, sem máscara), dedup preservando ordem.
-
-    Aceita formatos `12.345.678/0001-90` e `12345678000190`. Validação de
-    dígito verificador fica no `cnpj_extractor` (PR 3).
-    """
-    if not text:
-        return []
-    raw = CNPJ_RE.findall(text)
-    seen: set[str] = set()
-    result: list[str] = []
-    for c in raw:
-        digits = re.sub(r"\D", "", c)
-        if len(digits) == 14 and digits not in seen:
-            seen.add(digits)
-            result.append(digits)
-    return result
+# `extract_cnpjs` foi movido para `services.cnpj_utils` no PR 3 — onde também
+# vivem a validação de dígito verificador e a normalização. Use:
+#     from services.cnpj_utils import extract_cnpjs
 
 
 # ─── Scoring + validação ────────────────────────────────────────────────────

@@ -7,7 +7,6 @@ from services.email_providers.validators import (
     BLACKLIST_DOMAINS,
     BLACKLIST_LOCAL_PARTS,
     CORPORATE_LOCAL_PARTS,
-    extract_cnpjs,
     extract_emails,
     get_domain,
     is_valid_email,
@@ -94,25 +93,8 @@ class TestExtractEmails:
         assert extract_emails("Nenhum endereço aqui, só texto.") == []
 
 
-# ─── extract_cnpjs ──────────────────────────────────────────────────────────
-
-class TestExtractCnpjs:
-    def test_masked(self):
-        assert extract_cnpjs("CNPJ: 12.345.678/0001-90") == ["12345678000190"]
-
-    def test_unmasked(self):
-        assert extract_cnpjs("CNPJ 12345678000190 inscrito") == ["12345678000190"]
-
-    def test_multiple_dedup(self):
-        text = "CNPJ 12.345.678/0001-90 — 12345678000190"
-        assert extract_cnpjs(text) == ["12345678000190"]
-
-    def test_invalid_length_ignored(self):
-        assert extract_cnpjs("123456") == []
-
-    def test_empty(self):
-        assert extract_cnpjs("") == []
-        assert extract_cnpjs(None) == []
+# extract_cnpjs foi movido pra `services.cnpj_utils` no PR 3 — testes
+# completos vivem em `test_cnpj_utils.py`.
 
 
 # ─── score_email — blacklists ───────────────────────────────────────────────

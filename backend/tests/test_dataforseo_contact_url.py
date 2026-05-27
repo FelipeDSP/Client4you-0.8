@@ -172,3 +172,65 @@ async def test_disabled_via_env(monkeypatch):
     p = DataForSEOContactUrlProvider()
     result = await p.find_email({"contact_url": "https://x.com/c", "website": "https://x.com"})
     assert result is None
+
+
+# ─── PR 3: extracted_cnpjs ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_extracts_cnpj_from_html_along_with_email():
+    """Página com email + CNPJ no rodapé → ambos vêm no resultado."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text="""
+                <p>Contato: contato@empresa.com.br</p>
+                <footer>CNPJ 11.222.333/0001-81</footer>
+            """,
+        )
+
+    p = DataForSEOContactUrlProvider(client=_make_client(handler))
+    result = await p.find_email({
+        "contact_url": "https://empresa.com.br/contato",
+        "website": "https://empresa.com.br",
+    })
+    assert result is not None
+    assert result.email == "contato@empresa.com.br"
+    assert result.extracted_cnpjs == ["11222333000181"]
+
+
+@pytest.mark.asyncio
+async def test_extracts_cnpj_even_when_no_email_found():
+    """Sem email mas com CNPJ → email=None mas extracted_cnpjs preenchido."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text="<footer>CNPJ 11.222.333/0001-81 — use o formulário</footer>",
+        )
+
+    p = DataForSEOContactUrlProvider(client=_make_client(handler))
+    result = await p.find_email({
+        "contact_url": "https://empresa.com.br/contato",
+        "website": "https://empresa.com.br",
+    })
+    assert result is not None
+    assert result.email is None
+    assert result.extracted_cnpjs == ["11222333000181"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_cnpj_filtered():
+    """CNPJ com DV errado no HTML não vai pro extracted_cnpjs."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text="<footer>CNPJ 12.345.678/9012-34 (inválido)</footer>",
+        )
+
+    p = DataForSEOContactUrlProvider(client=_make_client(handler))
+    result = await p.find_email({
+        "contact_url": "https://x.com/c",
+        "website": "https://x.com",
+    })
+    assert result is not None
+    assert result.extracted_cnpjs == []

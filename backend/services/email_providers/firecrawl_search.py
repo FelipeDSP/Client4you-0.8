@@ -17,6 +17,7 @@ from typing import Optional
 
 import httpx
 
+from ..cnpj_utils import extract_cnpjs
 from .base import EmailProvider, EmailResult
 from .validators import extract_emails, get_domain, pick_best_email
 
@@ -98,19 +99,25 @@ class FirecrawlSearchProvider(EmailProvider):
             # Shape do Firecrawl /v1/search: {success, data: [{url, markdown, ...}, ...]}
             results = data.get("data") or data.get("web") or []
             all_candidates: list[str] = []
+            all_cnpjs: list[str] = []
             for item in results:
                 md = item.get("markdown") or item.get("content") or ""
                 all_candidates.extend(extract_emails(md))
+                for c in extract_cnpjs(md, validate=True):
+                    if c not in all_cnpjs:
+                        all_cnpjs.append(c)
 
             best = pick_best_email(all_candidates, lead)
             cost = self.cost_per_call  # request foi feita com sucesso
             if not best:
                 return EmailResult(
                     email=None, source=self.name, confidence=0.0, cost_usd=cost,
+                    extracted_cnpjs=all_cnpjs,
                 )
             email, score = best
             return EmailResult(
                 email=email, source=self.name, confidence=score, cost_usd=cost,
+                extracted_cnpjs=all_cnpjs,
             )
         finally:
             if owns_client:

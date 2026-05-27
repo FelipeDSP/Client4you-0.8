@@ -16,6 +16,7 @@ from typing import Optional
 
 import httpx
 
+from ..cnpj_utils import extract_cnpjs
 from .base import EmailProvider, EmailResult
 from .validators import extract_emails, pick_best_email
 
@@ -81,15 +82,21 @@ class DataForSEOContactUrlProvider(EmailProvider):
                     email=None, source=self.name, confidence=0.0, cost_usd=0.0,
                 )
 
-            candidates = extract_emails(resp.text)
+            html = resp.text
+            # Side-channel: CNPJs validados encontrados na página (rodapé,
+            # contato). Orchestrator persiste em leads.cnpj se não setado.
+            cnpjs = extract_cnpjs(html, validate=True)
+            candidates = extract_emails(html)
             best = pick_best_email(candidates, lead)
             if not best:
                 return EmailResult(
                     email=None, source=self.name, confidence=0.0, cost_usd=0.0,
+                    extracted_cnpjs=cnpjs,
                 )
             email, score = best
             return EmailResult(
                 email=email, source=self.name, confidence=score, cost_usd=0.0,
+                extracted_cnpjs=cnpjs,
             )
         finally:
             if owns_client:

@@ -12,12 +12,18 @@ class EmailResult:
 
     `email = None` significa "tentei e não achei" — distinto do provider devolver
     None (que significa "este provider não é aplicável a este lead").
+
+    `extracted_cnpjs` é um side-channel: providers que raspam HTML (Firecrawl,
+    DataForSEOContactUrl) extraem CNPJs do markdown e devolvem aqui. O
+    orchestrator (PR 4) persiste em `leads.cnpj` se ainda não setado — a
+    próxima enrichment já cai no ReceitaFederalProvider.
     """
 
     email: Optional[str]
     source: str            # "dataforseo_contact_url" | "receita_federal" | "firecrawl_search" | "firecrawl_map_scrape"
     confidence: float      # 0.0 a 1.0 — score do validator
     cost_usd: float = 0.0  # custo estimado desta chamada (pra logging/orçamento)
+    extracted_cnpjs: list[str] = field(default_factory=list)  # CNPJs validados achados durante a tentativa
     raw: Optional[dict] = field(default=None, repr=False)
 
 

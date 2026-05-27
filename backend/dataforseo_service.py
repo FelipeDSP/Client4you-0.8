@@ -6,6 +6,10 @@ banco e não por empresa:
     DATAFORSEO_LOGIN
     DATAFORSEO_PASSWORD
 
+Base URL configurável via DATAFORSEO_BASE_URL (default: api.dataforseo.com).
+Em dev/CI use https://sandbox.dataforseo.com/v3 — grátis, mesma estrutura de
+resposta, dados dummy.
+
 Usa httpx em HTTP/1.1 (mesmo padrão do firecrawl_service) para evitar os
 RemoteProtocolError de connection-pool que tivemos com HTTP/2.
 """
@@ -16,7 +20,11 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DATAFORSEO_URL = "https://api.dataforseo.com/v3/serp/google/maps/live/advanced"
+# Base URL configurável — sandbox vs produção. Veja docs/COOLIFY_ENV_VARS.md.
+DATAFORSEO_BASE_URL = os.getenv(
+    "DATAFORSEO_BASE_URL", "https://api.dataforseo.com/v3"
+).rstrip("/")
+DATAFORSEO_URL = f"{DATAFORSEO_BASE_URL}/serp/google/maps/live/advanced"
 
 # DataForSEO retorna no máximo 700 resultados por requisição. A cobrança é por
 # "página" de 100 resultados (depth 700 = 7 páginas faturadas).
@@ -41,7 +49,12 @@ def _credentials() -> str:
 
 
 def _normalize_item(item: dict, fallback_category: str) -> dict:
-    """Mapeia um item do DataForSEO para as colunas da tabela `leads`."""
+    """Mapeia um item do DataForSEO para as colunas da tabela `leads`.
+
+    Campos novos (PR 2): `contact_url` é persistido (migration v7) e usado
+    pelo DataForSEOContactUrlProvider como seed prioritária de scrape.
+    `domain` NÃO é persistido — derivado de website via validators.get_domain.
+    """
     rating = item.get("rating") or {}
     return {
         "name": item.get("title"),
@@ -54,6 +67,7 @@ def _normalize_item(item: dict, fallback_category: str) -> dict:
         "has_whatsapp": False,
         "email": None,
         "has_email": False,
+        "contact_url": item.get("contact_url") or None,
     }
 
 

@@ -48,6 +48,41 @@ LOGIN_LOCKOUT_DURATION=1800
 ADMIN_IP_WHITELIST=
 ```
 
+### 🔍 **DataForSEO (busca de leads no Google Maps):**
+
+```bash
+# Credenciais (vivem só no backend — não no banco, não por empresa)
+DATAFORSEO_LOGIN=seu_login
+DATAFORSEO_PASSWORD=sua_password
+
+# Base URL — sandbox em dev, produção em prod (default: produção)
+DATAFORSEO_BASE_URL=https://api.dataforseo.com/v3
+```
+
+**Quando usar cada valor:**
+
+| Ambiente | `DATAFORSEO_BASE_URL` | Custo | Dados |
+|---|---|---|---|
+| Dev / CI / smoke tests | `https://sandbox.dataforseo.com/v3` | Grátis, ilimitado | Dummy (mesma estrutura) |
+| Produção | omitir, ou `https://api.dataforseo.com/v3` | Cobrado por página de 100 resultados | Reais |
+
+> Sandbox **requer credenciais válidas da conta DataForSEO** (não aceita
+> credenciais arbitrárias). Se sua conta está bloqueada ou sem depósito,
+> ative `DATAFORSEO_LOGIN`/`PASSWORD` antes de testar. Veja
+> `backend/scripts/smoke_test_dataforseo.py` pra um teste runnable.
+
+### ✉️ **Email enrichment providers (toggles opcionais — default: todos `true`):**
+
+```bash
+# Cada provider pode ser desligado individualmente sem deploy de código
+ENABLE_DATAFORSEO_CONTACT_URL_PROVIDER=true
+ENABLE_FIRECRAWL_SEARCH_PROVIDER=true
+ENABLE_FIRECRAWL_MAP_SCRAPE_PROVIDER=true
+
+# Firecrawl base URL (raramente muda — só pra testes contra instância self-hosted)
+FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v1
+```
+
 ---
 
 ## 🎨 FRONTEND (React + Vite)

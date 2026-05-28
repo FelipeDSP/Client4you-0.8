@@ -46,6 +46,12 @@ LOGIN_LOCKOUT_DURATION=1800
 
 # Admin Whitelist (IPs permitidos para admin)
 ADMIN_IP_WHITELIST=
+
+# Concorrência de workers — precondição dos workers em-processo
+# Mantenha em 1 ou omita. Se aumentar a flag --workers no uvicorn, sete esta
+# variável pro mesmo número pra deixar o warning crítico aparecer no startup.
+# Ver docs/TECH_DEBT.md#3.
+UVICORN_WORKER_COUNT=1
 ```
 
 ### 🔍 **DataForSEO (busca de leads no Google Maps):**

@@ -25,6 +25,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Precondição de concorrência ─────────────────────────────────────────
+# email_worker.py e enrichment_worker.py usam dedup in-memory que assume
+# 1 worker uvicorn. Se alguém subir --workers N>1 intencionalmente, precisa
+# setar UVICORN_WORKER_COUNT=N pra deixar a infra registrar warning crítico
+# (e idealmente migrar workers pra Celery antes — ver TECH_DEBT.md#3).
+def _check_worker_assumption() -> None:
+    try:
+        declared = int(os.environ.get("UVICORN_WORKER_COUNT", "1"))
+    except (TypeError, ValueError):
+        declared = 1
+    if declared != 1:
+        logger.critical(
+            f"⚠️  UVICORN_WORKER_COUNT={declared} — email_worker/enrichment_worker "
+            "usam dedup in-memory e NÃO são multi-worker-safe. Risco de "
+            "double-send em campanhas e double-charge em Firecrawl. "
+            "Ver docs/TECH_DEBT.md#3 antes de prosseguir."
+        )
+
+
+_check_worker_assumption()
+
 # Create the main app instance
 app = FastAPI(title="Lead Dispatcher API", version="2.2.0")
 

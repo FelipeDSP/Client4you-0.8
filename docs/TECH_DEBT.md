@@ -61,6 +61,28 @@ endpoint POST /enrich-emails/resume/{batch_id} — não implementado).
 - Throttling por job (`asyncio.sleep`) bloqueia o event loop daquele
   worker pra outras tarefas.
 
+### ⛔ DO NOT ADD `--workers` SEM RESOLVER ANTES
+
+`backend/Dockerfile`, `deploy/install.sh` e `deploy/setup-hostinger.sh`
+rodam uvicorn **sem** `--workers` — default = 1 processo. Esta é uma
+**precondição implícita** dos workers em-processo.
+
+Se alguém futuramente quiser mais throughput e adicionar `--workers 2+`:
+
+- O dedup in-memory **quebra silenciosamente**: dois processos podem
+  pegar o mesmo `campaign_id`/`batch_id` ao mesmo tempo.
+- Consequência: **double-send em campanhas de email** (cliente recebe
+  email duas vezes), **double-charge em Firecrawl** (cada scrape custa
+  $0.02-0.03 e ainda passa pelo cache).
+
+Hardening defensivo: `server.py` lê `UVICORN_WORKER_COUNT` no startup e
+loga CRITICAL se != 1. Quem subir multi-worker tem que setar essa env e
+vai ver o warning nos logs — mas isso é **alerta, não bloqueio**.
+
+A solução correta antes de escalar é migrar pra Celery + Redis (descrito
+acima) ou implementar advisory lock no Postgres (`pg_try_advisory_lock`
++ `UPDATE ... RETURNING` atômico via RPC).
+
 **Quando migrar:** quando volume justificar — heurística:
 - >1000 enrichments/dia OU >10 campanhas concorrentes, OU
 - precisamos rodar 2+ workers uvicorn pra atender carga HTTP, OU

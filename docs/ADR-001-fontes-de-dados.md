@@ -89,7 +89,13 @@ Endpoint `POST /enrich-emails/async` aceita `force=true` no body que
 `reenrich_used` em vez de `emails_enriched_used`. Quota esgotada retorna
 **402** com payload estruturado pra UI mostrar mensagem específica.
 
-### D5 — Descoberta migrará pra Serper (pós-PR 6)
+### D5 — Descoberta migrará pra Serper (pós-PR 6) — ⚠️ SUPERADO POR ADR-002
+
+> **2026-05-28:** Esta decisão foi reavaliada e revertida em
+> [`ADR-002-fonte-de-descoberta.md`](ADR-002-fonte-de-descoberta.md). DataForSEO
+> mantido como fonte única; PR 7 cancelado. Motivo: Serper pagina via `page`
+> em `/maps` mas com cap de 20 por query, e degrada acima de ~100 resultados;
+> DataForSEO `MAX_DEPTH = 700` em 1 chamada resolve melhor nosso volume.
 
 DataForSEO (descoberta de leads via Google Maps) continua funcionando, mas
 nossa conta está travada por phone verification (não aceita BR). Serper é

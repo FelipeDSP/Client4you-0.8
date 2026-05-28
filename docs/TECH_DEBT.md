@@ -116,30 +116,34 @@ test em sandbox primeiro e em produção depois pra confirmar campos.
 
 ---
 
-## 5. Avaliar migração DataForSEO → Serper pra descoberta de leads
+## 5. Abstração `LeadDiscoveryProvider` avaliada e ADIADA
 
-A fonte de descoberta hoje é DataForSEO (Google Maps Live Advanced). A conta
-está travada por phone verification (ver item 4), e Serper é candidato a
-substituto com **mesmo modelo PAYG, 2500 buscas grátis e menos atrito de
-onboarding**.
+**Status:** ADIADA (2026-05-28). Plano original `plano-pr7-serper.md` cancelado.
 
-**Por que NÃO migrar agora:**
-- DataForSEO continua funcionando em produção — só o ambiente de teste local
-  está sem créditos. Não é blocker.
-- Misturar refactor de descoberta com o refactor de email enrichment em
-  andamento (PRs 1-6) violaria o princípio de PRs pequenos e revisáveis.
+DataForSEO atende melhor o volume atual (`MAX_DEPTH = 700` em 1 chamada). Análise
+completa em [`ADR-002-fonte-de-descoberta.md`](ADR-002-fonte-de-descoberta.md).
+Resumo:
 
-**Resolução proposta:**
-- Criar `backend/services/discovery_providers/` com interface
-  `LeadDiscoveryProvider` (ABC) — espelho do padrão de `EmailProvider`.
-- Adaptar `backend/dataforseo_service.py` pra implementar essa interface
-  (`DataForSEODiscoveryProvider`).
-- Criar `SerperDiscoveryProvider` plugando atrás da mesma interface.
-- Toggle via env: `LEAD_DISCOVERY_PROVIDER=dataforseo|serper` (default
-  `dataforseo` no primeiro deploy, virar `serper` quando validado).
+- **Serper avaliado:** PAYG mais barato, mas pagina via `page` em
+  `/maps` com cap de 20 por query. Pra 200 leads = 10 queries paginadas. Mais
+  HTTP, mais retry logic, e degradação documentada acima de ~100 resultados
+  (duplicados/irrelevantes).
+- **DataForSEO ganhou pelo volume nativo.** `depth=700` numa única request
+  cobre buscas grandes do produto (plano intermediário = 2000 leads/mês) sem
+  complexidade de paginação cliente.
 
-**Quando:** PR separado **após** o PR 6 do refactor de email enrichment
-(numerar como PR 7). Não inserir no meio da sequência atual.
+**Reabrir só se:**
+
+- DataForSEO travar de vez (conta suspensa permanente, suporte não responde)
+- DataForSEO mudar preço pra patamar que afete margem por plano
+- Volume médio por busca cair < 50 leads (paginação Serper fica viável)
+- Clientes reclamarem de cobertura → necessidade de comparar fontes
+
+Se reabrir, criar ADR-003 documentando o gatilho.
+
+A pendência operacional do DataForSEO (verificação BR — item 4 abaixo)
+continua sendo um blocker de produção, **resolvível** via ticket de suporte
+OU depósito mínimo $50.
 
 ---
 

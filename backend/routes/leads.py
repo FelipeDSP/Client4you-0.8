@@ -1,9 +1,10 @@
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
 from security_utils import get_authenticated_user, handle_error
 from helpers import get_db
 from dataforseo_service import search_google_maps, DataForSEOError, MAX_DEPTH
@@ -11,7 +12,10 @@ from services.cnpj_utils import normalize_cnpj
 from services.email_enrichment import (
     EmailEnrichmentOrchestrator,
     SupabaseDomainEmailCache,
+    increment_enrichment_telemetry,
+    persist_lead_enrichment,
 )
+from enrichment_worker import process_batch
 
 
 def _cache_ttl_days() -> int:
@@ -237,37 +241,6 @@ async def update_lead_cnpj(
     return {"id": lead_id, "cnpj": digits}
 
 
-def _increment_enrichment_telemetry(
-    sb_client, user_id: str, processed: int, total_cost: float, cache_hits: int,
-) -> None:
-    """Soma contadores em `user_quotas`. Best-effort — falha NÃO interrompe enrichment.
-
-    PR 4: telemetria-only. Não bloqueia. Limite mensal por plano + 402 vêm no PR 6.
-    """
-    try:
-        resp = (
-            sb_client.table("user_quotas")
-            .select("emails_enriched_used,firecrawl_credits_spent_estimated,cache_hits_count")
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        rows = resp.data or []
-        if not rows:
-            logger.warning(f"telemetria enrichment: user_quota ausente user_id={user_id}")
-            return
-        row = rows[0]
-        sb_client.table("user_quotas").update({
-            "emails_enriched_used": (row.get("emails_enriched_used") or 0) + processed,
-            "firecrawl_credits_spent_estimated": (
-                float(row.get("firecrawl_credits_spent_estimated") or 0) + total_cost
-            ),
-            "cache_hits_count": (row.get("cache_hits_count") or 0) + cache_hits,
-        }).eq("user_id", user_id).execute()
-    except Exception as e:
-        logger.warning(f"telemetria enrichment falhou (não-fatal): {type(e).__name__}: {e}")
-
-
 @router.post("/enrich-emails")
 async def enrich_emails(
     request: Request,
@@ -276,11 +249,13 @@ async def enrich_emails(
 ):
     """Enriquece emails dos leads via cascata orquestrada + cache global por domínio.
 
+    Endpoint SÍNCRONO — bloqueia até processar todos os leads. Adequado pra
+    batches pequenos (até ~10 leads). Pra batches maiores use
+    `POST /enrich-emails/async` (PR 5).
+
     Shape COMPAT com front atual (`useLeads.tsx` lê `data.updated[i].id` e
     `data.updated[i].email`). Campos novos são aditivos — front antigo ignora,
     front novo (PR 6) usa pra badges e indicador de cache.
-
-    PR 4 não bloqueia por quota (apenas conta). Limite e 402 entram no PR 6.
     """
     try:
         db = get_db()
@@ -324,22 +299,10 @@ async def enrich_emails(
             if result.cached:
                 cache_hits += 1
 
-            updates: dict = {
-                "last_enrichment_attempted_at": now_iso,
-                "enrichment_source": result.source,
-                "enrichment_confidence": result.confidence if result.confidence > 0 else None,
-            }
-            if result.email:
-                updates["email"] = result.email
-                updates["has_email"] = True
-            # CNPJ extraído do scrape — só persiste se o lead ainda não tinha
-            if not lead.get("cnpj") and result.extracted_cnpjs:
-                updates["cnpj"] = result.extracted_cnpjs[0]
-
-            db.client.table("leads").update(updates) \
-                .eq("id", lead["id"]) \
-                .eq("company_id", company_id) \
-                .execute()
+            persist_lead_enrichment(
+                db.client, lead["id"], company_id, result, now_iso,
+                lead_cnpj_already_set=bool(lead.get("cnpj")),
+            )
 
             updated.append({
                 "id": lead["id"],
@@ -349,10 +312,9 @@ async def enrich_emails(
                 "cached": result.cached,
             })
 
-        if user_id:
-            _increment_enrichment_telemetry(
-                db.client, user_id, len(leads), total_cost, cache_hits,
-            )
+        increment_enrichment_telemetry(
+            db.client, user_id, len(leads), total_cost, cache_hits,
+        )
 
         return {
             "updated": updated,
@@ -363,3 +325,114 @@ async def enrich_emails(
     except Exception as e:
         logger.error(f"Error enriching emails: {type(e).__name__}: {e}")
         return {"updated": [], "error": str(e)}
+
+
+# =========================================================================
+# PR 5 — Fila assíncrona de enrichment
+# =========================================================================
+# Endpoints NOVOS (síncrono permanece intacto pra não quebrar front atual).
+# Frontend migra pra esses endpoints no PR 6.
+
+
+def _count_jobs_by_status(sb_client, batch_id: str, company_id: str) -> dict:
+    """Conta jobs do batch por status. Retorna {status: count} (multi-tenant)."""
+    resp = (
+        sb_client.table("enrichment_jobs")
+        .select("status")
+        .eq("batch_id", batch_id)
+        .eq("company_id", company_id)
+        .execute()
+    )
+    counts = {"pending": 0, "processing": 0, "completed": 0, "failed": 0}
+    for row in (resp.data or []):
+        s = row.get("status")
+        if s in counts:
+            counts[s] += 1
+    return counts
+
+
+@router.post("/enrich-emails/async", status_code=202)
+async def enrich_emails_async(
+    payload: EnrichEmailsRequest,
+    background_tasks: BackgroundTasks,
+    auth_user: dict = Depends(get_authenticated_user),
+):
+    """Enfileira enrichment dos leads e retorna `batch_id` pra polling.
+
+    Front faz polling em `GET /enrich-emails/status/{batch_id}` pra acompanhar.
+    Padrão espelha `email_campaigns/{id}/send` (BackgroundTasks single-process).
+
+    Retorna 202 com `{batch_id, total, pending}`. Frontend antigo continua
+    chamando o endpoint síncrono `POST /enrich-emails`.
+    """
+    db = get_db()
+    company_id = auth_user["company_id"]
+    user_id = auth_user["user_id"]
+
+    if not payload.lead_ids:
+        raise HTTPException(status_code=400, detail="lead_ids vazio")
+
+    # Filtra leads que de fato pertencem à company (defense-in-depth)
+    leads_resp = (
+        db.client.table("leads")
+        .select("id")
+        .in_("id", payload.lead_ids)
+        .eq("company_id", company_id)
+        .execute()
+    )
+    valid_lead_ids = [row["id"] for row in (leads_resp.data or [])]
+    if not valid_lead_ids:
+        raise HTTPException(status_code=404, detail="Nenhum lead válido encontrado")
+
+    batch_id = str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
+    rows = [
+        {
+            "batch_id": batch_id,
+            "lead_id": lid,
+            "company_id": company_id,
+            "user_id": user_id,
+            "status": "pending",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        for lid in valid_lead_ids
+    ]
+    db.client.table("enrichment_jobs").insert(rows).execute()
+
+    background_tasks.add_task(process_batch, batch_id, company_id)
+
+    return {
+        "batch_id": batch_id,
+        "total": len(valid_lead_ids),
+        "pending": len(valid_lead_ids),
+    }
+
+
+@router.get("/enrich-emails/status/{batch_id}")
+async def enrich_emails_status(
+    batch_id: str,
+    auth_user: dict = Depends(get_authenticated_user),
+):
+    """Retorna contadores por status do batch.
+
+    Frontend faz polling com este endpoint a cada ~2s pra exibir progresso.
+    Multi-tenant: só vê batches da própria company.
+    """
+    db = get_db()
+    company_id = auth_user["company_id"]
+
+    counts = _count_jobs_by_status(db.client, batch_id, company_id)
+    total = sum(counts.values())
+    if total == 0:
+        raise HTTPException(status_code=404, detail="batch não encontrado")
+
+    return {
+        "batch_id": batch_id,
+        "total": total,
+        "pending": counts["pending"],
+        "processing": counts["processing"],
+        "completed": counts["completed"],
+        "failed": counts["failed"],
+        "done": counts["pending"] == 0 and counts["processing"] == 0,
+    }

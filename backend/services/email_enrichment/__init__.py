@@ -15,6 +15,10 @@ from .domain_cache import (
     SupabaseDomainEmailCache,
 )
 from .orchestrator import EmailEnrichmentOrchestrator, OrchestratorResult
+from .persistence import (
+    increment_enrichment_telemetry,
+    persist_lead_enrichment,
+)
 
 __all__ = [
     "EmailEnrichmentOrchestrator",
@@ -23,4 +27,6 @@ __all__ = [
     "DomainEmailCache",
     "SupabaseDomainEmailCache",
     "InMemoryDomainEmailCache",
+    "persist_lead_enrichment",
+    "increment_enrichment_telemetry",
 ]

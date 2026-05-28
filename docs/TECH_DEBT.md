@@ -44,11 +44,12 @@ custo por lead enriquecido vs. ganho de conversão.
 
 ## 3. Workers em-processo (`BackgroundTasks`) — migração futura pra Celery + Redis
 
-Tanto `email_worker.py` quanto `enrichment_worker.py` (a partir do PR 5 do
-refactor de enrichment) rodam single-process via `BackgroundTasks` da
-FastAPI. Se o uvicorn reiniciar no meio, o job para — confiamos em
-`status='pending'` persistido no banco pra retomar quando o caller chamar
-de novo.
+Tanto `email_worker.py` quanto `enrichment_worker.py` (PR 5) rodam
+single-process via `BackgroundTasks` da FastAPI. Se o uvicorn reiniciar
+no meio, o job para — confiamos em `status='pending'` persistido no banco
+pra retomar quando o caller chamar de novo (POST /enrich-emails/async com
+o mesmo payload cria batch novo; pra retomar batch antigo, precisaria
+endpoint POST /enrich-emails/resume/{batch_id} — não implementado).
 
 **Limites conhecidos:**
 
@@ -167,3 +168,24 @@ Se <40%, considerar:
 - Negociar plano Firecrawl maior antes de subir preço pro cliente
 - Self-hosted Firecrawl (já tem repo open-source) — troca cobrança mensal por
   hosting + storage próprio
+
+---
+
+## 8. Endpoints async sem testes de integração via TestClient
+
+PR 5 adicionou `POST /enrich-emails/async` e `GET /enrich-emails/status/{batch_id}`.
+O worker (`process_batch`) tem 8 testes que cobrem lógica de processamento, dedup,
+multi-tenancy e idempotência. **Os endpoints em si NÃO têm testes de integração**
+via FastAPI TestClient — só sanity check de import.
+
+**Por que adiar:** TestClient com auth mock + DB mock exige montar fixtures
+complexas (security_utils, get_db, etc.). Worker já cobre a parte com lógica
+não-trivial; endpoints são thin wrappers (validação básica + INSERT + dispatch).
+
+**Quando resolver:** quando aparecer regressão em algum dos endpoints, OU
+quando o PR 6 do frontend revelar contrato ambíguo. Mais barato adicionar
+sob demanda do que escrever especulativamente agora.
+
+**Como resolver:** TestClient + monkeypatch em `get_db` (FakeSupabase do
+`test_enrichment_worker.py` já tem o pattern) + override de
+`get_authenticated_user` via `app.dependency_overrides`.

@@ -15,12 +15,13 @@ class EmailResult:
 
     `extracted_cnpjs` é um side-channel: providers que raspam HTML (Firecrawl,
     DataForSEOContactUrl) extraem CNPJs do markdown e devolvem aqui. O
-    orchestrator (PR 4) persiste em `leads.cnpj` se ainda não setado — a
-    próxima enrichment já cai no ReceitaFederalProvider.
+    orchestrator persiste em `leads.cnpj` se ainda não setado — o pipeline
+    de metadata (BrasilAPI via ReceitaFederalMetadataProvider) usa esse CNPJ
+    pra popular telefone/razão social/QSA num passo separado.
     """
 
     email: Optional[str]
-    source: str            # "dataforseo_contact_url" | "receita_federal" | "firecrawl_search" | "firecrawl_map_scrape"
+    source: str            # "dataforseo_contact_url" | "firecrawl_search" | "firecrawl_map_scrape" | "cache_hit"
     confidence: float      # 0.0 a 1.0 — score do validator
     cost_usd: float = 0.0  # custo estimado desta chamada (pra logging/orçamento)
     extracted_cnpjs: list[str] = field(default_factory=list)  # CNPJs validados achados durante a tentativa
@@ -40,8 +41,8 @@ class EmailProvider(ABC):
         Returns:
             EmailResult: o provider rodou. `email` pode ser None se rodou mas
                 não achou (ex: site sem email no HTML).
-            None: o provider não é aplicável a este lead (ex: sem CNPJ pro
-                ReceitaFederalProvider, sem website pro Firecrawl).
+            None: o provider não é aplicável a este lead (ex: sem website
+                pro Firecrawl, sem contact_url pro DataForSEO).
 
         Exceções de rede/HTTP devem propagar — o Orchestrator (PR 4) decide se
         loga e continua pra próximo provider.

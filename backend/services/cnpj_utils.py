@@ -6,8 +6,8 @@ dependência externa (não precisa do `python-stdnum`, que é dependência pesad
 e teria que validar mil países).
 
 Por que `services/` e não `email_providers/`: CNPJ não é conceito de email —
-serve pro ReceitaFederalProvider, mas também pro endpoint manual de input,
-pra eventual dedup, pra futuros providers de CPF, etc.
+serve pro ReceitaFederalMetadataProvider (em `metadata_enrichment/`), pro
+endpoint manual de input, pra eventual dedup, pra futuros providers de CPF.
 """
 from __future__ import annotations
 

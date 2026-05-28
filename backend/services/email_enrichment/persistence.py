@@ -63,18 +63,24 @@ def increment_enrichment_telemetry(
     processed: int,
     total_cost: float,
     cache_hits: int,
+    reenrich: bool = False,
 ) -> None:
     """Soma contadores em `user_quotas`. Best-effort — falha NÃO interrompe.
 
-    PR 4 introduziu os 3 contadores. PR 5 mantém a mesma semântica.
-    Bloqueio por limite mensal + 402 ainda fica pro PR 6 (TECH_DEBT.md#6).
+    Quando `reenrich=True`, incrementa `reenrich_used` em vez de
+    `emails_enriched_used` (sub-quota separada do botão "Reenriquecer", PR 6).
+    Reenrichment força bypass cache → `cache_hits_count` não sobe nessa rota.
+    `firecrawl_credits_spent_estimated` continua subindo (telemetria geral).
     """
     if not user_id:
         return
     try:
+        select_cols = (
+            "emails_enriched_used,reenrich_used,firecrawl_credits_spent_estimated,cache_hits_count"
+        )
         resp = (
             sb_client.table("user_quotas")
-            .select("emails_enriched_used,firecrawl_credits_spent_estimated,cache_hits_count")
+            .select(select_cols)
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -84,13 +90,21 @@ def increment_enrichment_telemetry(
             logger.warning(f"telemetria enrichment: user_quota ausente user_id={user_id}")
             return
         row = rows[0]
-        sb_client.table("user_quotas").update({
-            "emails_enriched_used": (row.get("emails_enriched_used") or 0) + processed,
-            "firecrawl_credits_spent_estimated": (
-                float(row.get("firecrawl_credits_spent_estimated") or 0) + total_cost
-            ),
-            "cache_hits_count": (row.get("cache_hits_count") or 0) + cache_hits,
-        }).eq("user_id", user_id).execute()
+        new_cost = float(row.get("firecrawl_credits_spent_estimated") or 0) + total_cost
+
+        if reenrich:
+            updates = {
+                "reenrich_used": (row.get("reenrich_used") or 0) + processed,
+                "firecrawl_credits_spent_estimated": new_cost,
+            }
+        else:
+            updates = {
+                "emails_enriched_used": (row.get("emails_enriched_used") or 0) + processed,
+                "firecrawl_credits_spent_estimated": new_cost,
+                "cache_hits_count": (row.get("cache_hits_count") or 0) + cache_hits,
+            }
+
+        sb_client.table("user_quotas").update(updates).eq("user_id", user_id).execute()
     except Exception as e:
         logger.warning(
             f"telemetria enrichment falhou (não-fatal): {type(e).__name__}: {e}"

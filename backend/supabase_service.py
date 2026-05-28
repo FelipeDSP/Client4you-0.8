@@ -210,6 +210,9 @@ class SupabaseService:
             'leads_limit': limits['leads_limit'],
             'campaigns_limit': limits['campaigns_limit'],
             'messages_limit': limits['messages_limit'],
+            # PR 6: limites de enrichment (vêm de PLAN_LIMITS, contadores em user_quotas)
+            'email_enrichment_limit': limits.get('email_enrichment_limit', 0),
+            'reenrich_limit': limits.get('reenrich_limit', 0),
             'plan_expires_at': period_end,
             'subscription_status': status,
         }
@@ -240,6 +243,10 @@ class SupabaseService:
                 'lead_search':     ('leads_limit',     'leads_used'),
                 'campaign_send':   ('campaigns_limit', 'campaigns_used'),
                 'message_send':    ('messages_limit',  'messages_sent'),
+                # PR 6: enrichment de email (cache hit OU miss conta)
+                'email_enrich':    ('email_enrichment_limit', 'emails_enriched_used'),
+                # PR 6: reenriquecimento força bypass cache, contador separado
+                'reenrich':        ('reenrich_limit', 'reenrich_used'),
             }
 
             if action not in action_map:
@@ -279,6 +286,9 @@ class SupabaseService:
                 'lead_search':     'leads_used',
                 'campaign_send':   'campaigns_used',
                 'message_send':    'messages_sent',
+                # PR 6: enrichment de email
+                'email_enrich':    'emails_enriched_used',
+                'reenrich':        'reenrich_used',
             }
 
             used_field = action_map.get(action)

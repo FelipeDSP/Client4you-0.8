@@ -363,6 +363,71 @@ async def test_process_batch_idempotent_only_processes_pending():
 
 
 @pytest.mark.asyncio
+async def test_process_batch_force_increments_reenrich_used():
+    """force=True → reenrich_used sobe, emails_enriched_used permanece 0."""
+    sb = _FakeSupabase()
+    _seed_batch(sb, "b1", "c1", "u1", [
+        {"id": "L1", "company_id": "c1", "website": "https://a.com.br", "cnpj": None},
+        {"id": "L2", "company_id": "c1", "website": "https://b.com.br", "cnpj": None},
+    ])
+    # Adiciona reenrich_used=0 manualmente (não está no _seed_batch ainda)
+    sb.tables["user_quotas"][0]["reenrich_used"] = 0
+
+    p = _StubProvider("firecrawl_search", EmailResult(
+        email="ok@empresa.com.br", source="firecrawl_search",
+        confidence=0.9, cost_usd=0.03,
+    ))
+    orch = _mk_orchestrator([p])
+
+    await process_batch("b1", "c1", sb_client=sb, orchestrator=orch, force=True)
+
+    quota = sb.tables["user_quotas"][0]
+    assert quota["reenrich_used"] == 2  # 2 leads processados
+    assert quota["emails_enriched_used"] == 0  # NÃO sobe a quota normal
+    # firecrawl_credits_spent_estimated continua subindo (telemetria geral)
+    assert abs(quota["firecrawl_credits_spent_estimated"] - 0.06) < 1e-9
+
+
+@pytest.mark.asyncio
+async def test_process_batch_force_bypasses_cache():
+    """Com force=True, mesmo cache hit dispara cascata (cached=False sempre)."""
+    sb = _FakeSupabase()
+    _seed_batch(sb, "b1", "c1", "u1", [
+        {"id": "L1", "company_id": "c1", "website": "https://a.com.br", "cnpj": None},
+    ])
+    sb.tables["user_quotas"][0]["reenrich_used"] = 0
+
+    # Pré-popula cache (sem reach desse fake, então faço pela InMemoryCache do orchestrator)
+    p_called = []
+    class _CallCounter(_StubProvider):
+        async def find_email(self, lead):
+            p_called.append(lead.get("id"))
+            return await super().find_email(lead)
+
+    p = _CallCounter("firecrawl_search", EmailResult(
+        email="fresh@empresa.com.br", source="firecrawl_search",
+        confidence=0.9, cost_usd=0.03,
+    ))
+    orch = _mk_orchestrator([p])
+    # Pré-carrega cache do orchestrator com dado stale
+    from datetime import datetime, timezone
+    from services.email_enrichment.domain_cache import CacheEntry
+    await orch._cache.upsert("a.com.br", CacheEntry(
+        email="stale@empresa.com.br", source="firecrawl_search",
+        confidence=0.9, cost_usd=0.0,
+        scraped_at=datetime.now(timezone.utc),
+    ))
+
+    await process_batch("b1", "c1", sb_client=sb, orchestrator=orch, force=True)
+
+    # Provider FOI chamado (cache foi bypassado)
+    assert p_called == ["L1"]
+    job = sb.tables["enrichment_jobs"][0]
+    assert job["result_email"] == "fresh@empresa.com.br"
+    assert job["result_cached"] is False
+
+
+@pytest.mark.asyncio
 async def test_process_batch_ignores_jobs_from_other_company():
     """company_id filtra: jobs de outras empresas não são tocados."""
     sb = _FakeSupabase()

@@ -25,10 +25,23 @@ PLAN_NAME_MAP: Dict[str, str] = {
 #   busca pela quota restante. Por isso `leads_limit` NÃO deve ser -1 (ilimitado
 #   = prejuízo garantido com API paga por resultado). A cobrança do DataForSEO
 #   é por página de 100 resultados, então mantenha múltiplos de 100.
+# `email_enrichment_limit` = teto mensal de tentativas de enrichment (cache hit
+# OU miss conta). Política atual: igual ao `leads_limit` (todo lead extraído
+# pode ser enriquecido 1x). Cache global por domínio absorve a maior parte do
+# custo Firecrawl em batches reais.
+#
+# `reenrich_limit` = sub-quota separada do botão "Reenriquecer" (PR 6). Esse
+# fluxo FORÇA bypass do cache → sempre gasta Firecrawl. Limitado agressivamente
+# (10/mês no plano top, 0 nos outros) porque é cenário always-miss.
+#
+# Os números abaixo são chute conservador inicial. Recalibrar com dados reais
+# de custo Firecrawl em produção — ver docs/TECH_DEBT.md#9.
 PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
     'demo': {
         'name': 'Demo',
         'leads_limit': 50,
+        'email_enrichment_limit': 50,
+        'reenrich_limit': 0,
         'campaigns_limit': 1,
         'messages_limit': 50,
         'whatsapp_instances': 0,
@@ -36,6 +49,8 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
     'basico': {
         'name': 'Plano Básico',
         'leads_limit': 500,
+        'email_enrichment_limit': 500,
+        'reenrich_limit': 0,
         'campaigns_limit': 0,
         'messages_limit': 0,
         'whatsapp_instances': 0,
@@ -43,6 +58,8 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
     'intermediario': {
         'name': 'Plano Intermediário',
         'leads_limit': 2000,
+        'email_enrichment_limit': 2000,
+        'reenrich_limit': 10,
         'campaigns_limit': -1,
         'messages_limit': -1,
         'whatsapp_instances': 0,
@@ -55,6 +72,8 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
 SUSPENDED_LIMITS: Dict[str, Any] = {
     'name': 'Conta Suspensa',
     'leads_limit': 0,
+    'email_enrichment_limit': 0,
+    'reenrich_limit': 0,
     'campaigns_limit': 0,
     'messages_limit': 0,
     'whatsapp_instances': 0,

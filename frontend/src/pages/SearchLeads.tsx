@@ -5,11 +5,12 @@ import { LeadTable } from "@/components/LeadTable";
 import { Card } from "@/components/ui/card";
 import { ExportButton } from "@/components/ExportButton";
 import { QuotaLimitModal } from "@/components/QuotaLimitModal";
-import { useLeads } from "@/hooks/useLeads";
+import { EnrichmentProgress } from "@/components/EnrichmentProgress";
+import { useLeads, QuotaExhaustedError } from "@/hooks/useLeads";
 import { useQuotas } from "@/hooks/useQuotas";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { Lead } from "@/types";
-import { Search, ArrowDown, Loader2, Mail, ChevronLeft, ChevronRight, Database } from "lucide-react";
+import { Search, ArrowDown, Loader2, Mail, ChevronLeft, ChevronRight, Database, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
@@ -32,11 +33,26 @@ export default function SearchLeads() {
   const [filters, setFilters] = useState<LeadFilterState>(defaultFilters);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
 
-  const { quota, checkQuota, refresh: refreshQuota } = useQuotas();
+  const {
+    quota,
+    checkQuota,
+    refresh: refreshQuota,
+    canReenrich,
+    reenrichRemaining,
+    reenrichLimit,
+  } = useQuotas();
   const [showQuotaModal, setShowQuotaModal] = useState(false);
 
-  const { deleteLead, searchLeads, enrichEmails, saveLeadsToBase, isSavingToBase } = useLeads();
+  const {
+    deleteLead,
+    searchLeads,
+    enrichEmails,
+    saveLeadsToBase,
+    isSavingToBase,
+    enrichmentProgress,
+  } = useLeads();
   const { toast } = useToast();
+  const [isReenriching, setIsReenriching] = useState(false);
 
   const handleSaveToBase = async () => {
     if (selectedLeads.length === 0) return;
@@ -80,10 +96,81 @@ export default function SearchLeads() {
         const u = updated.find((u: any) => u.id === lead.id);
         return u ? { ...lead, email: u.email } : lead;
       });
-    } catch {
+    } catch (e) {
+      if (e instanceof QuotaExhaustedError) {
+        toast({
+          variant: "destructive",
+          title: "Limite de enriquecimento atingido",
+          description: `${e.detail.used}/${e.detail.limit} usados este mês. Faça upgrade pra continuar.`,
+        });
+        setShowQuotaModal(true);
+      }
       return leads;
     } finally {
       setIsEnrichingPage(false);
+      refreshQuota(); // pega contador novo do servidor
+    }
+  };
+
+  const handleReenrich = async () => {
+    // Só leads selecionados que já têm email (não faz sentido reenriquecer vazio)
+    const targets = currentResults.filter(
+      (l) => selectedLeads.includes(l.id) && l.website
+    );
+    if (targets.length === 0) {
+      toast({
+        title: "Nenhum lead pra reenriquecer",
+        description: "Selecione leads com site cadastrado.",
+      });
+      return;
+    }
+    if (targets.length > reenrichRemaining) {
+      toast({
+        variant: "destructive",
+        title: "Sub-quota insuficiente",
+        description: `Você tem ${reenrichRemaining}/${reenrichLimit} reenriquecimentos restantes — selecionou ${targets.length}.`,
+      });
+      return;
+    }
+
+    setIsReenriching(true);
+    try {
+      const updated = await enrichEmails(
+        targets.map((l) => l.id),
+        { force: true }
+      );
+      // Aplica resultado localmente (mesma lógica do autoEnrich)
+      if (updated.length > 0) {
+        setCurrentResults((prev) =>
+          prev.map((lead) => {
+            const u = updated.find((x: any) => x.id === lead.id);
+            return u ? { ...lead, email: u.email } : lead;
+          })
+        );
+      }
+      const cacheHits = updated.filter((u: any) => u.cached).length;
+      toast({
+        title: "Reenriquecimento concluído",
+        description: `${updated.length}/${targets.length} atualizados. ${cacheHits} pelo cache.`,
+        className: "border-l-4 border-purple-500",
+      });
+    } catch (e) {
+      if (e instanceof QuotaExhaustedError) {
+        toast({
+          variant: "destructive",
+          title: "Sub-quota de reenriquecimento esgotada",
+          description: `${e.detail.used}/${e.detail.limit} usados. Aguarde o ciclo ou peça upgrade.`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erro no reenriquecimento",
+          description: (e as Error)?.message || "Tente novamente.",
+        });
+      }
+    } finally {
+      setIsReenriching(false);
+      refreshQuota();
     }
   };
 
@@ -163,23 +250,55 @@ export default function SearchLeads() {
         {currentResults.length > 0 && (
           <div className="flex items-center gap-2">
             {selectedLeads.length > 0 && (
-              <Button
-                onClick={handleSaveToBase}
-                disabled={isSavingToBase}
-                className="gap-2 bg-green-600 hover:bg-green-700"
-              >
-                {isSavingToBase ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Database className="h-4 w-4" />
+              <>
+                {/* Botão Reenriquecer — só plano intermediário+ com sub-quota */}
+                {canReenrich ? (
+                  <Button
+                    onClick={handleReenrich}
+                    disabled={isReenriching || isBusy}
+                    variant="outline"
+                    className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50"
+                    title={`${reenrichRemaining}/${reenrichLimit} reenriquecimentos restantes este mês`}
+                  >
+                    {isReenriching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    Reenriquecer ({selectedLeads.length}) · {reenrichRemaining}/{reenrichLimit}
+                  </Button>
+                ) : reenrichLimit === 0 ? null : (
+                  <Button
+                    disabled
+                    variant="outline"
+                    className="gap-2 opacity-60"
+                    title="Você usou todos os reenriquecimentos deste mês"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Reenriquecer (0/{reenrichLimit})
+                  </Button>
                 )}
-                Salvar na Base ({selectedLeads.length})
-              </Button>
+                <Button
+                  onClick={handleSaveToBase}
+                  disabled={isSavingToBase}
+                  className="gap-2 bg-green-600 hover:bg-green-700"
+                >
+                  {isSavingToBase ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Database className="h-4 w-4" />
+                  )}
+                  Salvar na Base ({selectedLeads.length})
+                </Button>
+              </>
             )}
             <ExportButton leads={filteredLeads} selectedLeads={selectedLeads} />
           </div>
         )}
       </div>
+
+      {/* Barra de progresso do batch async — visível durante enrichment/reenrichment */}
+      {enrichmentProgress && <EnrichmentProgress progress={enrichmentProgress} />}
 
       <Card className="p-6 bg-white shadow-sm border-none rounded-xl">
         <div className="space-y-6">

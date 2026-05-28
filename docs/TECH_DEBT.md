@@ -143,32 +143,21 @@ onboarding**.
 
 ---
 
-## 6. Quota de email enrichment ainda não bloqueia
+## 6. ✅ RESOLVIDO em PR 6 (2026-05-28)
 
-A migration v10 (PR 4) adicionou `user_quotas.emails_enriched_used`,
-`firecrawl_credits_spent_estimated`, `cache_hits_count`. O orchestrator
-incrementa os 3 atomicamente após cada enrichment, mas **NÃO bloqueia o
-usuário** por agora — não há limite por plano configurado.
+A migration v10 (PR 4) adicionou os contadores; PR 6 ligou o bloqueio.
 
-**Por que adiar o bloqueio:**
+- `email_enrichment_limit` e `reenrich_limit` agora vivem em `backend/plans.py`
+  por plano: demo=50/0, basico=500/0, intermediario=2000/10.
+- `POST /enrich-emails` (síncrono) e `POST /enrich-emails/async` (com
+  `force=true` ou false) verificam quota e retornam **402** com payload
+  `{reason, action, limit, used, requested}`.
+- Frontend (`useLeads.enrichEmailsMutation`) levanta `QuotaExhaustedError`
+  com `detail` estruturado; `SearchLeads.tsx` abre toast + `QuotaLimitModal`.
+- Migration v13 adicionou `user_quotas.reenrich_used` separado.
 
-- O endpoint atual é síncrono e o frontend não trata `402` específico de
-  quota de enrichment. Bloquear no PR 4 quebra UX silenciosamente.
-- O front recebe campos novos (`source`, `confidence`, `cached`) aditivos,
-  mas a UI de "Reenriquecer" / sub-quota separada só entra no PR 6.
-
-**Resolução proposta (PR 6):**
-
-- Mapear limites por plano no backend (ex: demo=10, básico=100, intermediário=500).
-- Validar `emails_enriched_used >= limite` no início do endpoint e retornar
-  `402` com mensagem específica.
-- Sub-quota separada (~10/mês) pro botão "Reenriquecer" do plano intermediário+
-  forçar bypass do cache (cliente quer dado fresco).
-- Frontend trata `402` com toast + modal de upgrade.
-
-**Hoje a telemetria já está armazenada** — quando o PR 6 ligar o gate,
-usuários que estão consumindo MUITO já têm o histórico no `user_quotas`
-pra avaliar planos.
+**Calibração dos limites:** ver item 9 abaixo (números atuais são chute
+conservador, precisa recalibrar com custo Firecrawl real em produção).
 
 ---
 
@@ -211,3 +200,37 @@ sob demanda do que escrever especulativamente agora.
 **Como resolver:** TestClient + monkeypatch em `get_db` (FakeSupabase do
 `test_enrichment_worker.py` já tem o pattern) + override de
 `get_authenticated_user` via `app.dependency_overrides`.
+
+---
+
+## 9. Limites de email enrichment são chute conservador
+
+`backend/plans.py` define limites por plano:
+
+| Plano          | `leads_limit` | `email_enrichment_limit` | `reenrich_limit` |
+|----------------|---------------|--------------------------|------------------|
+| demo           | 50            | 50                       | 0                |
+| basico         | 500           | 500                      | 0                |
+| intermediario  | 2000          | 2000                     | 10               |
+
+**Por que estes números:** lê-se "todo lead extraído pode ser enriquecido 1x".
+Simples de explicar pro cliente, alinhado com unit economics do PR 4
+(quota por lead, não por crédito Firecrawl). Reenrich limitado agressivamente
+(10/mês) porque força always-miss no cache → sempre gasta Firecrawl.
+
+**Por que pode estar errado:**
+
+- Não temos dados reais de custo Firecrawl em produção ainda. Hit rate
+  do cache (premissa de 70%+ do item 7) é estimativa.
+- Plano Firecrawl mensal não foi definido — não dá pra calcular margem por
+  plano cliente ainda.
+- Se hit rate < 50% E intermediario for vendido muito, plano top vira
+  prejuízo (2000 leads × $0.025 médio Firecrawl = $50/mês de custo só de
+  enrichment vs R$ 99,90 cobrado).
+
+**Quando recalibrar:**
+
+- Após 1 mês com volume produção (>500 enrichments). Métricas:
+  - `cache_hits_count / emails_enriched_used` por usuário
+  - `firecrawl_credits_spent_estimated` médio por usuário
+- Decidir entre: subir preço, baixar limite, ou negociar plano Firecrawl maior.

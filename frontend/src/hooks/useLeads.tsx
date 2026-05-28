@@ -7,6 +7,47 @@ import { makeAuthenticatedRequest } from "@/lib/api";
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || "";
 
+// PR 6: polling do batch async em /enrich-emails/status/{batch_id}
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_ATTEMPTS = 150; // 5 min com intervalo de 2s
+
+export interface EnrichmentProgress {
+  batchId: string;
+  total: number;
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  done: boolean;
+  force: boolean;
+}
+
+export interface EnrichmentJobResult {
+  lead_id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  result_email: string | null;
+  result_source: string | null;
+  result_confidence: number | null;
+  result_cached: boolean;
+  result_cost_usd: number;
+  error: string | null;
+}
+
+export class QuotaExhaustedError extends Error {
+  detail: {
+    reason: string;
+    action: "email_enrich" | "reenrich";
+    limit: number;
+    used: number;
+    requested: number;
+  };
+  constructor(detail: QuotaExhaustedError["detail"]) {
+    super(detail.reason);
+    this.name = "QuotaExhaustedError";
+    this.detail = detail;
+  }
+}
+
 export interface SearchResult {
   leads: Lead[];
   hasMore: boolean;
@@ -16,10 +57,18 @@ export interface SearchResult {
   location: string;
 }
 
+/** Espera N ms (resolução do setTimeout). */
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+
 export function useLeads() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isSearching, setIsSearching] = useState(false);
+
+  // PR 6: progresso do batch async (pra UI de barra/contador)
+  const [enrichmentProgress, setEnrichmentProgress] =
+    useState<EnrichmentProgress | null>(null);
 
   // --- 1. QUERY: Base de Leads (só os marcados com saved_at) ---
   const { data: leads = [], isLoading: isLoadingLeads } = useQuery({
@@ -149,24 +198,110 @@ export function useLeads() {
     }
   });
 
-  // --- 4. MUTATION: Extrair Emails via Firecrawl ---
+  // --- 4. MUTATION: Enriquecer emails via cascata async + polling ---
+  // PR 6: migrou de POST /enrich-emails síncrono pra POST /enrich-emails/async
+  // + polling em GET /enrich-emails/status/{batch_id}. Aceita force=true (botão
+  // "Reenriquecer") que vai pra sub-quota separada e bypassa cache.
   const enrichEmailsMutation = useMutation({
-    mutationFn: async (leadIds: string[]) => {
-      if (leadIds.length === 0) return [];
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
-      const { data: { session } } = await supabase.auth.getSession();
+    mutationFn: async (args: { leadIds: string[]; force?: boolean }) => {
+      const { leadIds, force = false } = args;
+      if (leadIds.length === 0) return { updated: [], failed: [], cache_hits: 0 };
 
-      const response = await fetch(`${backendUrl}/api/leads/enrich-emails`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ lead_ids: leadIds }),
+      // (1) Dispara batch
+      const startResp = await makeAuthenticatedRequest(
+        `${API_URL}/api/leads/enrich-emails/async`,
+        {
+          method: "POST",
+          body: JSON.stringify({ lead_ids: leadIds, force }),
+        }
+      );
+
+      if (startResp.status === 402) {
+        const body = await startResp.json().catch(() => ({}));
+        const detail = body?.detail ?? body;
+        throw new QuotaExhaustedError({
+          reason: detail?.reason ?? "Limite atingido",
+          action: detail?.action ?? (force ? "reenrich" : "email_enrich"),
+          limit: detail?.limit ?? 0,
+          used: detail?.used ?? 0,
+          requested: detail?.requested ?? leadIds.length,
+        });
+      }
+      if (!startResp.ok) {
+        const err = await startResp.json().catch(() => ({}));
+        throw new Error(err.detail || `Erro ${startResp.status}`);
+      }
+
+      const startData = await startResp.json();
+      const batchId: string = startData.batch_id;
+      const total: number = startData.total;
+
+      setEnrichmentProgress({
+        batchId,
+        total,
+        pending: total,
+        processing: 0,
+        completed: 0,
+        failed: 0,
+        done: false,
+        force,
       });
 
-      if (!response.ok) throw new Error("Erro na extração de emails");
-      return response.json();
+      // (2) Polling de status
+      try {
+        for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+          await sleep(POLL_INTERVAL_MS);
+          const statusResp = await makeAuthenticatedRequest(
+            `${API_URL}/api/leads/enrich-emails/status/${batchId}`
+          );
+          if (!statusResp.ok) {
+            if (statusResp.status === 404) {
+              throw new Error("Batch não encontrado (pode ter sido limpo)");
+            }
+            continue; // erro transitório — tenta de novo na próxima
+          }
+          const status = await statusResp.json();
+          setEnrichmentProgress({
+            batchId,
+            total: status.total,
+            pending: status.pending,
+            processing: status.processing,
+            completed: status.completed,
+            failed: status.failed,
+            done: status.done,
+            force,
+          });
+          if (status.done) break;
+        }
+
+        // (3) Pega resultados completos pra atualizar UI
+        const finalResp = await makeAuthenticatedRequest(
+          `${API_URL}/api/leads/enrich-emails/status/${batchId}?include_jobs=true`
+        );
+        if (!finalResp.ok) {
+          throw new Error("Falha ao buscar resultados finais do batch");
+        }
+        const finalData = await finalResp.json();
+        const jobs: EnrichmentJobResult[] = finalData.jobs || [];
+
+        const updated = jobs
+          .filter((j) => j.status === "completed")
+          .map((j) => ({
+            id: j.lead_id,
+            email: j.result_email,
+            source: j.result_source,
+            confidence: j.result_confidence,
+            cached: j.result_cached,
+          }));
+        const failed = jobs
+          .filter((j) => j.status === "failed")
+          .map((j) => ({ id: j.lead_id, error: j.error }));
+        const cache_hits = updated.filter((u) => u.cached).length;
+
+        return { batch_id: batchId, total, updated, failed, cache_hits };
+      } finally {
+        setEnrichmentProgress(null);
+      }
     },
     onSuccess: (data) => {
       if (data.updated && data.updated.length > 0) {
@@ -177,6 +312,10 @@ export function useLeads() {
           })
         );
       }
+    },
+    onError: () => {
+      // Garante limpeza do progresso mesmo se polling der erro / quota 402
+      setEnrichmentProgress(null);
     },
   });
 
@@ -350,11 +489,24 @@ export function useLeads() {
     }
   };
 
-  const enrichEmails = async (leadIds: string[]) => {
+  // PR 6: `force` opcional dispara o fluxo de reenriquecimento (sub-quota
+  // separada). Erro de quota (402) propaga via QuotaExhaustedError pra caller
+  // decidir UX (toast vs modal de upgrade); outros erros silenciam pra []
+  // (mantém comportamento legado dos chamadores que não tratam erro).
+  const enrichEmails = async (
+    leadIds: string[],
+    options: { force?: boolean } = {}
+  ) => {
     try {
-      const data = await enrichEmailsMutation.mutateAsync(leadIds);
+      const data = await enrichEmailsMutation.mutateAsync({
+        leadIds,
+        force: options.force,
+      });
       return data.updated || [];
-    } catch { return []; }
+    } catch (e) {
+      if (e instanceof QuotaExhaustedError) throw e;
+      return [];
+    }
   };
 
   return {
@@ -367,6 +519,7 @@ export function useLeads() {
     isSavingToBase: saveLeadsToBaseMutation.isPending,
     searchLeads,
     enrichEmails,
+    enrichmentProgress,
     addManualLead: addManualLeadMutation.mutateAsync,
     saveLeadsToBase: saveLeadsToBaseMutation.mutateAsync,
     deleteLead: (id: string) => deleteLeadMutation.mutate(id),

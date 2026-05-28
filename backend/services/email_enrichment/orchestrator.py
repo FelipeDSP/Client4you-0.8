@@ -72,7 +72,15 @@ class EmailEnrichmentOrchestrator:
             scraped_at = scraped_at.replace(tzinfo=timezone.utc)
         return (now - scraped_at) < self._cache_ttl
 
-    async def enrich(self, lead: dict) -> OrchestratorResult:
+    async def enrich(self, lead: dict, bypass_cache: bool = False) -> OrchestratorResult:
+        """Pipeline pra 1 lead.
+
+        Args:
+            lead: dict com website / contact_url / cnpj / id.
+            bypass_cache: se True, pula lookup E upsert do cache global.
+                Usado pelo botão "Reenriquecer" (PR 6) que força always-miss
+                pra cliente que quer dado fresh. Sempre gasta Firecrawl.
+        """
         lead_id = str(lead.get("id") or "")
         domain = get_domain(lead.get("website")) or get_domain(lead.get("domain"))
 
@@ -82,17 +90,18 @@ class EmailEnrichmentOrchestrator:
                 confidence=0.0, cost_usd=0.0, cached=False,
             )
 
-        # ── (2) Cache lookup ──────────────────────────────────────────────
-        cached = await self._cache.lookup(domain)
-        if cached and self._is_fresh(cached.scraped_at):
-            return OrchestratorResult(
-                lead_id=lead_id,
-                email=cached.email,
-                source=cached.source or "cache_hit",
-                confidence=cached.confidence,
-                cost_usd=0.0,
-                cached=True,
-            )
+        # ── (2) Cache lookup (pulado em bypass_cache) ─────────────────────
+        if not bypass_cache:
+            cached = await self._cache.lookup(domain)
+            if cached and self._is_fresh(cached.scraped_at):
+                return OrchestratorResult(
+                    lead_id=lead_id,
+                    email=cached.email,
+                    source=cached.source or "cache_hit",
+                    confidence=cached.confidence,
+                    cost_usd=0.0,
+                    cached=True,
+                )
 
         # ── (3) Cascata ───────────────────────────────────────────────────
         total_cost = 0.0
@@ -122,17 +131,22 @@ class EmailEnrichmentOrchestrator:
                     break
 
         # ── (4) Cache upsert (positivo OU negativo) ───────────────────────
+        # bypass_cache também pula o upsert: reenriquecimento não polui o
+        # cache global com um resultado que pode ser stale do POV de outros
+        # leads do mesmo domínio. Quem reenriqueceu pegou um "snapshot" só
+        # pra si — o cache mantém a entry anterior.
         final_email = best.email if best else None
         final_source = best.source if best else None
         final_conf = best.confidence if best else 0.0
 
-        await self._cache.upsert(domain, CacheEntry(
-            email=final_email,
-            source=final_source,
-            confidence=final_conf,
-            cost_usd=total_cost,
-            scraped_at=datetime.now(timezone.utc),
-        ))
+        if not bypass_cache:
+            await self._cache.upsert(domain, CacheEntry(
+                email=final_email,
+                source=final_source,
+                confidence=final_conf,
+                cost_usd=total_cost,
+                scraped_at=datetime.now(timezone.utc),
+            ))
 
         # Dedup CNPJs preservando ordem (mesmo CNPJ em N páginas = 1 entrada)
         seen: set[str] = set()

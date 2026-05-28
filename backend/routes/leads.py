@@ -31,6 +31,36 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 
 class EnrichEmailsRequest(BaseModel):
     lead_ids: List[str]
+    # PR 6: força bypass do cache (sub-quota reenrich, plano intermediário+).
+    # Síncrono ignora (não tem fluxo de reenriquecimento síncrono); async
+    # respeita: muda check de quota e propaga bypass_cache pro orchestrator.
+    force: bool = False
+
+
+async def _check_enrichment_quota(
+    db, user_id: str, action: str, leads_count: int,
+) -> None:
+    """Levanta HTTPException 402 se a quota da action está esgotada/indisponível.
+
+    `action` é 'email_enrich' OU 'reenrich' (PR 6). Mensagem do detail é
+    consumida pelo frontend (toast/modal de upgrade).
+    """
+    check = await db.check_quota(user_id, action)
+    if check.get('allowed'):
+        return
+    limit = check.get('limit', 0)
+    used = check.get('used', 0)
+    reason = check.get('reason', '')
+    raise HTTPException(
+        status_code=402,
+        detail={
+            "reason": reason,
+            "action": action,
+            "limit": limit,
+            "used": used,
+            "requested": leads_count,
+        },
+    )
 
 
 class SearchLeadsRequest(BaseModel):
@@ -253,14 +283,19 @@ async def enrich_emails(
     batches pequenos (até ~10 leads). Pra batches maiores use
     `POST /enrich-emails/async` (PR 5).
 
-    Shape COMPAT com front atual (`useLeads.tsx` lê `data.updated[i].id` e
-    `data.updated[i].email`). Campos novos são aditivos — front antigo ignora,
-    front novo (PR 6) usa pra badges e indicador de cache.
+    PR 6: ativa bloqueio 402 quando `emails_enriched_used >= email_enrichment_limit`.
+    `force=true` no body é IGNORADO aqui — síncrono não tem fluxo de
+    reenriquecimento. Use `POST /enrich-emails/async` com `force=true` pra reenrichment.
+
+    Shape COMPAT com front atual.
     """
     try:
         db = get_db()
         company_id = auth_user["company_id"]
         user_id = auth_user.get("user_id")
+
+        if user_id:
+            await _check_enrichment_quota(db, user_id, 'email_enrich', len(payload.lead_ids))
 
         leads_response = (
             db.client.table("leads")
@@ -322,6 +357,9 @@ async def enrich_emails(
             "cache_hits": cache_hits,
         }
 
+    except HTTPException:
+        # 402 (quota) precisa propagar como erro real pra UI poder reagir.
+        raise
     except Exception as e:
         logger.error(f"Error enriching emails: {type(e).__name__}: {e}")
         return {"updated": [], "error": str(e)}
@@ -362,8 +400,14 @@ async def enrich_emails_async(
     Front faz polling em `GET /enrich-emails/status/{batch_id}` pra acompanhar.
     Padrão espelha `email_campaigns/{id}/send` (BackgroundTasks single-process).
 
-    Retorna 202 com `{batch_id, total, pending}`. Frontend antigo continua
-    chamando o endpoint síncrono `POST /enrich-emails`.
+    PR 6:
+    - `force=true` no body → bypass cache + sub-quota `reenrich` (limit menor).
+      Plano intermediário+ tem `reenrich_limit = 10`; demais planos têm 0
+      → 402 imediato pra plano básico/demo.
+    - `force=false` (default) → quota normal `email_enrich` (mesmo limite
+      que `leads_limit` por plano).
+    - 402 retorna `{reason, action, limit, used, requested}` pro front
+      mostrar UI específica (modal de upgrade vs "quota esgotada").
     """
     db = get_db()
     company_id = auth_user["company_id"]
@@ -371,6 +415,10 @@ async def enrich_emails_async(
 
     if not payload.lead_ids:
         raise HTTPException(status_code=400, detail="lead_ids vazio")
+
+    # Quota check ANTES de tocar leads/jobs — fail fast
+    action = 'reenrich' if payload.force else 'email_enrich'
+    await _check_enrichment_quota(db, user_id, action, len(payload.lead_ids))
 
     # Filtra leads que de fato pertencem à company (defense-in-depth)
     leads_resp = (
@@ -400,23 +448,28 @@ async def enrich_emails_async(
     ]
     db.client.table("enrichment_jobs").insert(rows).execute()
 
-    background_tasks.add_task(process_batch, batch_id, company_id)
+    background_tasks.add_task(process_batch, batch_id, company_id, force=payload.force)
 
     return {
         "batch_id": batch_id,
         "total": len(valid_lead_ids),
         "pending": len(valid_lead_ids),
+        "force": payload.force,
     }
 
 
 @router.get("/enrich-emails/status/{batch_id}")
 async def enrich_emails_status(
     batch_id: str,
+    include_jobs: bool = False,
     auth_user: dict = Depends(get_authenticated_user),
 ):
     """Retorna contadores por status do batch.
 
-    Frontend faz polling com este endpoint a cada ~2s pra exibir progresso.
+    Frontend faz polling a cada ~2s sem `include_jobs` (payload leve).
+    Quando `done=true`, faz última request com `include_jobs=true` pra pegar
+    detalhes (email/source/confidence/cached) e atualizar a UI dos leads.
+
     Multi-tenant: só vê batches da própria company.
     """
     db = get_db()
@@ -427,7 +480,7 @@ async def enrich_emails_status(
     if total == 0:
         raise HTTPException(status_code=404, detail="batch não encontrado")
 
-    return {
+    response = {
         "batch_id": batch_id,
         "total": total,
         "pending": counts["pending"],
@@ -436,3 +489,18 @@ async def enrich_emails_status(
         "failed": counts["failed"],
         "done": counts["pending"] == 0 and counts["processing"] == 0,
     }
+
+    if include_jobs:
+        jobs_resp = (
+            db.client.table("enrichment_jobs")
+            .select(
+                "lead_id,status,result_email,result_source,"
+                "result_confidence,result_cached,result_cost_usd,error"
+            )
+            .eq("batch_id", batch_id)
+            .eq("company_id", company_id)
+            .execute()
+        )
+        response["jobs"] = jobs_resp.data or []
+
+    return response

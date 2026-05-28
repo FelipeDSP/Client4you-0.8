@@ -70,6 +70,25 @@ todos os clientes. Pra proteger margem:
 
 Early-stop quando `confidence >= 0.8`. Cache lookup ANTES da cascata.
 
+### D5b — Quota por lead com sub-quota dedicada de reenriquecimento (PR 6)
+
+`email_enrichment_limit` (mesma magnitude de `leads_limit`) e `reenrich_limit`
+(sub-quota dedicada do botão "Reenriquecer") vivem em `backend/plans.py`.
+Reason:
+
+- Quota por LEAD (não por crédito Firecrawl) é vendável e simples. Cache
+  global absorve custo — economia vira margem nossa.
+- Reenriquecimento força bypass cache → cenário always-miss, mais caro.
+  Sub-quota agressiva (10/mês no top, 0 nos demais) preserva margem.
+- Limites atuais são chute conservador — `TECH_DEBT.md#9` documenta
+  necessidade de recalibrar após volume produção.
+
+Endpoint `POST /enrich-emails/async` aceita `force=true` no body que
+(a) checa `reenrich_used < reenrich_limit`, (b) bypassa o
+`domain_email_cache` (sem lookup E sem upsert), (c) incrementa
+`reenrich_used` em vez de `emails_enriched_used`. Quota esgotada retorna
+**402** com payload estruturado pra UI mostrar mensagem específica.
+
 ### D5 — Descoberta migrará pra Serper (pós-PR 6)
 
 DataForSEO (descoberta de leads via Google Maps) continua funcionando, mas

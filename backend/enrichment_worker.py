@@ -47,11 +47,15 @@ async def _process_one_job(
     db_client,
     orchestrator: EmailEnrichmentOrchestrator,
     job: dict,
+    bypass_cache: bool = False,
 ) -> tuple[bool, float, bool]:
     """Processa 1 job. Retorna (ok, cost_usd, cache_hit).
 
     ok=False quando orchestrator levantou exceção OU o lead sumiu/é de outra
     company. Worker continua pra próximo job.
+
+    `bypass_cache` é propagado pro orchestrator — usado pelo botão
+    "Reenriquecer" (PR 6) que força always-miss.
     """
     job_id = job["id"]
     lead_id = job["lead_id"]
@@ -88,7 +92,7 @@ async def _process_one_job(
     lead = leads[0]
 
     try:
-        result = await orchestrator.enrich(lead)
+        result = await orchestrator.enrich(lead, bypass_cache=bypass_cache)
     except Exception as e:
         msg = f"{type(e).__name__}: {e}"
         logger.error(f"[enrichment_worker] orchestrator falhou job={job_id} lead={lead_id}: {msg}")
@@ -140,6 +144,7 @@ async def process_batch(
     company_id: str,
     sb_client=None,
     orchestrator: Optional[EmailEnrichmentOrchestrator] = None,
+    force: bool = False,
 ) -> None:
     """Loop principal: processa todos os jobs pendentes do batch.
 
@@ -153,6 +158,10 @@ async def process_batch(
         sb_client: Supabase client (default: get_db().client). Injetável pra testes.
         orchestrator: orquestrador a usar. Default: Supabase cache + providers
             reais. Pra testes, passar um com InMemoryDomainEmailCache + providers fake.
+        force: se True, propaga `bypass_cache=True` em todos os
+            orchestrator.enrich() do batch (reenriquecimento do PR 6). Faz a
+            telemetria subir em `reenrich_used` em vez de `emails_enriched_used`.
+            Servidor restart no meio do batch: ver TECH_DEBT.md#3.
     """
     if batch_id in _running_batches:
         logger.warning(f"[enrichment_worker] batch {batch_id} já em execução; ignorando")
@@ -192,7 +201,9 @@ async def process_batch(
             if first_user_id is None:
                 first_user_id = job.get("user_id")
 
-            ok, cost, cached = await _process_one_job(sb, orchestrator, job)
+            ok, cost, cached = await _process_one_job(
+                sb, orchestrator, job, bypass_cache=force,
+            )
             processed += 1
             total_cost += cost
             if cached:
@@ -205,6 +216,7 @@ async def process_batch(
         if processed > 0:
             increment_enrichment_telemetry(
                 sb, first_user_id, processed, total_cost, cache_hits,
+                reenrich=force,
             )
 
         logger.info(

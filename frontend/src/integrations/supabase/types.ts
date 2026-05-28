@@ -83,49 +83,88 @@ export type Database = {
         Row: {
           address: string | null
           category: string | null
+          cnae: string | null
+          cnpj: string | null
           company_id: string
+          contact_url: string | null
           created_at: string
           email: string | null
+          enrichment_confidence: number | null
+          enrichment_source: string | null
           has_email: boolean | null
           has_whatsapp: boolean | null
           id: string
+          last_enrichment_attempted_at: string | null
+          metadata_enriched_at: string | null
           name: string
+          nome_fantasia: string | null
           phone: string | null
+          porte: string | null
+          qsa: Json | null
           rating: number | null
+          razao_social: string | null
           reviews_count: number | null
+          saved_at: string | null
           search_id: string | null
+          situacao_cadastral: string | null
           website: string | null
         }
         Insert: {
           address?: string | null
           category?: string | null
+          cnae?: string | null
+          cnpj?: string | null
           company_id: string
+          contact_url?: string | null
           created_at?: string
           email?: string | null
+          enrichment_confidence?: number | null
+          enrichment_source?: string | null
           has_email?: boolean | null
           has_whatsapp?: boolean | null
           id?: string
+          last_enrichment_attempted_at?: string | null
+          metadata_enriched_at?: string | null
           name: string
+          nome_fantasia?: string | null
           phone?: string | null
+          porte?: string | null
+          qsa?: Json | null
           rating?: number | null
+          razao_social?: string | null
           reviews_count?: number | null
+          saved_at?: string | null
           search_id?: string | null
+          situacao_cadastral?: string | null
           website?: string | null
         }
         Update: {
           address?: string | null
           category?: string | null
+          cnae?: string | null
+          cnpj?: string | null
           company_id?: string
+          contact_url?: string | null
           created_at?: string
           email?: string | null
+          enrichment_confidence?: number | null
+          enrichment_source?: string | null
           has_email?: boolean | null
           has_whatsapp?: boolean | null
           id?: string
+          last_enrichment_attempted_at?: string | null
+          metadata_enriched_at?: string | null
           name?: string
+          nome_fantasia?: string | null
           phone?: string | null
+          porte?: string | null
+          qsa?: Json | null
           rating?: number | null
+          razao_social?: string | null
           reviews_count?: number | null
+          saved_at?: string | null
           search_id?: string | null
+          situacao_cadastral?: string | null
           website?: string | null
         }
         Relationships: [

@@ -304,3 +304,75 @@ async def test_orchestrator_result_lead_id_preserved():
 
     result = await orch.enrich({"id": "abc-123", "website": "https://x.com"})
     assert result.lead_id == "abc-123"
+
+
+# ─── PR 6: bypass_cache (reenriquecimento) ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_bypass_cache_skips_lookup_and_upsert():
+    """bypass_cache=True pula lookup E upsert — cache fica intocado."""
+    cache = InMemoryDomainEmailCache()
+    # Cache pré-populado com entry "stale" — bypass deve IGNORAR
+    await cache.upsert("empresa.com.br", CacheEntry(
+        email="stale@empresa.com.br",
+        source="firecrawl_search",
+        confidence=0.9,
+        cost_usd=0.0,
+        scraped_at=datetime.now(timezone.utc),
+    ))
+
+    p = _StubProvider("firecrawl_search", EmailResult(
+        email="fresh@empresa.com.br", source="firecrawl_search",
+        confidence=0.95, cost_usd=0.03,
+    ))
+    orch = EmailEnrichmentOrchestrator(cache=cache, providers=[p])
+
+    result = await orch.enrich(_mk_lead(), bypass_cache=True)
+
+    # Pegou o fresco, não o cached
+    assert result.email == "fresh@empresa.com.br"
+    assert result.cached is False
+    assert result.cost_usd == 0.03
+    assert p.call_count == 1
+
+    # Cache PRESERVA a entry original (não foi sobrescrita)
+    cached_after = await cache.lookup("empresa.com.br")
+    assert cached_after is not None
+    assert cached_after.email == "stale@empresa.com.br"
+
+
+@pytest.mark.asyncio
+async def test_bypass_cache_does_not_pollute_cache_with_negative_result():
+    """Reenrichment que não acha email NÃO grava negativo no cache."""
+    cache = InMemoryDomainEmailCache()
+    p = _StubProvider("p", EmailResult(
+        email=None, source="p", confidence=0.0, cost_usd=0.02,
+    ))
+    orch = EmailEnrichmentOrchestrator(cache=cache, providers=[p])
+
+    result = await orch.enrich(_mk_lead(), bypass_cache=True)
+
+    assert result.email is None
+    assert result.cached is False
+    # Cache permaneceu vazio
+    assert await cache.lookup("empresa.com.br") is None
+
+
+@pytest.mark.asyncio
+async def test_bypass_cache_default_false_preserves_old_behavior():
+    """Sem passar bypass_cache, comportamento idêntico ao PR 4/5."""
+    cache = InMemoryDomainEmailCache()
+    await cache.upsert("empresa.com.br", CacheEntry(
+        email="cached@empresa.com.br", source="firecrawl_search",
+        confidence=0.9, cost_usd=0.0,
+        scraped_at=datetime.now(timezone.utc),
+    ))
+    p = _StubProvider("never_called", None)
+    orch = EmailEnrichmentOrchestrator(cache=cache, providers=[p])
+
+    result = await orch.enrich(_mk_lead())  # SEM bypass_cache
+
+    assert result.cached is True
+    assert result.email == "cached@empresa.com.br"
+    assert p.call_count == 0

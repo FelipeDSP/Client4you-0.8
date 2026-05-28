@@ -19,6 +19,14 @@ export interface UserQuota {
   campaigns_used: number;
   messages_limit: number;
   messages_sent: number;
+  // PR 6: limites e contadores de enrichment de email
+  email_enrichment_limit: number;
+  emails_enriched_used: number;
+  reenrich_limit: number;
+  reenrich_used: number;
+  // Telemetria interna (não bloqueia)
+  firecrawl_credits_spent_estimated?: number;
+  cache_hits_count?: number;
   reset_date: string;
   plan_expires_at?: string;
   subscription_status?: 'active' | 'suspended' | 'canceled' | 'inactive';
@@ -26,6 +34,13 @@ export interface UserQuota {
   created_at: string;
   updated_at: string;
 }
+
+export type QuotaAction =
+  | 'lead_search'
+  | 'campaign_send'
+  | 'message_send'
+  | 'email_enrich'
+  | 'reenrich';
 
 export interface QuotaCheckResult {
   allowed: boolean;
@@ -72,7 +87,7 @@ export function useQuotas() {
 
   // 2. MUTATION: Incrementar Quota
   const incrementMutation = useMutation({
-    mutationFn: async ({ action, amount }: { action: 'lead_search' | 'campaign_send' | 'message_send', amount: number }) => {
+    mutationFn: async ({ action, amount }: { action: QuotaAction, amount: number }) => {
       const response = await makeAuthenticatedRequest(
         `${API_URL}/api/quotas/increment?action=${action}&amount=${amount}`,
         { method: 'POST' }
@@ -88,14 +103,14 @@ export function useQuotas() {
 
   // 3. Funções Auxiliares (Logic Check)
   
-  const checkQuota = useCallback(async (action: 'lead_search' | 'campaign_send' | 'message_send'): Promise<QuotaCheckResult> => {
+  const checkQuota = useCallback(async (action: QuotaAction): Promise<QuotaCheckResult> => {
     if (!user?.id) return { allowed: false, reason: 'Usuário não autenticado' };
 
     // Otimização: Verificar cache local primeiro para casos Ilimitados (-1)
     if (quota) {
       let limit = 0;
       let used = 0;
-      
+
       if (action === 'lead_search') {
         limit = quota.leads_limit;
         used = quota.leads_used;
@@ -105,6 +120,12 @@ export function useQuotas() {
       } else if (action === 'message_send') {
         limit = quota.messages_limit;
         used = quota.messages_sent;
+      } else if (action === 'email_enrich') {
+        limit = quota.email_enrichment_limit ?? 0;
+        used = quota.emails_enriched_used ?? 0;
+      } else if (action === 'reenrich') {
+        limit = quota.reenrich_limit ?? 0;
+        used = quota.reenrich_used ?? 0;
       }
       
       // Se for ilimitado no cache, retorna IMEDIATAMENTE sem bater no servidor (Economia de Request)
@@ -136,7 +157,7 @@ export function useQuotas() {
     }
   }, [user?.id, quota]); // Dependência 'quota' permite a otimização local
 
-  const incrementQuota = async (action: 'lead_search' | 'campaign_send' | 'message_send', amount: number = 1): Promise<boolean> => {
+  const incrementQuota = async (action: QuotaAction, amount: number = 1): Promise<boolean> => {
     if (!user?.id) return false;
     try {
       await incrementMutation.mutateAsync({ action, amount });
@@ -151,6 +172,13 @@ export function useQuotas() {
   const hasUnlimitedLeads = quota?.leads_limit === -1;
   const hasUnlimitedCampaigns = quota?.campaigns_limit === -1;
   const canUseCampaigns = quota ? quota.campaigns_limit !== 0 : false;
+
+  // PR 6: sub-quota reenriquecer — usado pelo botão "Reenriquecer"
+  const reenrichLimit = quota?.reenrich_limit ?? 0;
+  const reenrichUsed = quota?.reenrich_used ?? 0;
+  const canReenrich =
+    !!quota && reenrichLimit > 0 && reenrichUsed < reenrichLimit;
+  const reenrichRemaining = Math.max(0, reenrichLimit - reenrichUsed);
   
   const leadsPercentage = quota && !hasUnlimitedLeads
     ? Math.min((quota.leads_used / quota.leads_limit) * 100, 100)
@@ -172,6 +200,11 @@ export function useQuotas() {
     hasUnlimitedCampaigns,
     canUseCampaigns,
     leadsPercentage,
-    isPlanExpired
+    isPlanExpired,
+    // PR 6: reenriquecer
+    canReenrich,
+    reenrichLimit,
+    reenrichUsed,
+    reenrichRemaining,
   };
 }

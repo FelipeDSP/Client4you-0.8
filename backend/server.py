@@ -46,8 +46,24 @@ def _check_worker_assumption() -> None:
 
 _check_worker_assumption()
 
+
+# ── Feature flag: módulo de Campanhas de Email ───────────────────────────
+# Quando False (default), as rotas /api/email-accounts, /api/email-campaigns
+# e /api/email-tracking NÃO são registradas — endpoints retornam 404 e o
+# worker process_campaign NUNCA é disparado (só era chamado via endpoint
+# email_campaigns:send). Tabelas e dados no banco ficam intactos.
+# Pra reativar: setar ENABLE_CAMPAIGNS=true (env) + rebuild com
+# VITE_ENABLE_CAMPAIGNS=true no frontend. Ver docs/FEATURE_FLAGS.md.
+ENABLE_CAMPAIGNS = os.environ.get("ENABLE_CAMPAIGNS", "false").lower() == "true"
+
 # Create the main app instance
 app = FastAPI(title="Lead Dispatcher API", version="2.2.0")
+
+if not ENABLE_CAMPAIGNS:
+    logger.info(
+        "Campanhas de email DESABILITADAS (ENABLE_CAMPAIGNS=false). "
+        "Endpoints /api/email-* não registrados — worker process_campaign nunca dispara."
+    )
 
 # Configure rate limiter globally
 limiter = Limiter(key_func=get_remote_address)
@@ -109,9 +125,14 @@ from routes.quotas import router as quotas_router
 from routes.admin import admin_router
 from routes.auth import security_router
 from routes.webhooks import webhook_router
-from routes.email_accounts import router as email_accounts_router
-from routes.email_campaigns import router as email_campaigns_router
-from routes.email_tracking import router as email_tracking_router
+
+# Imports dos módulos de campanhas vivem dentro do guard pra evitar carregar
+# email_worker / email_service / dependências SMTP em produção quando a
+# feature está desligada (default).
+if ENABLE_CAMPAIGNS:
+    from routes.email_accounts import router as email_accounts_router
+    from routes.email_campaigns import router as email_campaigns_router
+    from routes.email_tracking import router as email_tracking_router
 
 # Setup unified API router
 api_router = APIRouter(prefix="/api")
@@ -129,9 +150,11 @@ async def health_check():
 api_router.include_router(leads_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(quotas_router)
-api_router.include_router(email_accounts_router)
-api_router.include_router(email_campaigns_router)
-api_router.include_router(email_tracking_router)
+
+if ENABLE_CAMPAIGNS:
+    api_router.include_router(email_accounts_router)
+    api_router.include_router(email_campaigns_router)
+    api_router.include_router(email_tracking_router)
 
 # Attach everything to the main app
 app.include_router(api_router)

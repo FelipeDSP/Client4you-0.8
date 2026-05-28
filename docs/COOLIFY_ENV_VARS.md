@@ -52,6 +52,15 @@ ADMIN_IP_WHITELIST=
 # variável pro mesmo número pra deixar o warning crítico aparecer no startup.
 # Ver docs/TECH_DEBT.md#3.
 UVICORN_WORKER_COUNT=1
+
+# ── Feature flag: módulo de Campanhas de Email ──
+# Quando "false" (default agora), as rotas /api/email-accounts,
+# /api/email-campaigns e /api/email-tracking NÃO são registradas, o worker
+# process_campaign nunca dispara, e o frontend esconde tudo de campanha.
+# Pra reativar: set ENABLE_CAMPAIGNS=true (backend) + VITE_ENABLE_CAMPAIGNS=true
+# (frontend, rebuild) + redeploy. Ver docs/FEATURE_FLAGS.md.
+# IMPORTANTE: os DOIS precisam estar sincronizados.
+ENABLE_CAMPAIGNS=false
 ```
 
 ### 🔍 **DataForSEO (busca de leads no Google Maps):**
@@ -107,6 +116,11 @@ EMAIL_CACHE_TTL_DAYS=30
 ```bash
 # URL do Backend
 VITE_BACKEND_URL=https://seu-dominio-backend.com/api
+
+# Feature flag: módulo de Campanhas de Email (manter sincronizado com
+# ENABLE_CAMPAIGNS do backend). Vite resolve no BUILD, não em runtime —
+# mudou? rebuild + redeploy. Default "false".
+VITE_ENABLE_CAMPAIGNS=false
 ```
 
 **IMPORTANTE:** No Coolify, o frontend React usa `VITE_` prefix, não `REACT_APP_`.

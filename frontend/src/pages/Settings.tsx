@@ -42,6 +42,7 @@ import {
 import { useEmailAccounts, EmailAccount, CreateEmailAccountPayload } from "@/hooks/useEmailAccounts";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/contexts/PageTitleContext";
+import { ENABLE_CAMPAIGNS } from "@/lib/featureFlags";
 
 // Presets dos provedores mais comuns — pré-preenche host/porta/TLS
 const SMTP_PRESETS: Record<string, { label: string; host: string; port: number; use_tls: boolean; hint: string }> = {
@@ -168,12 +169,21 @@ export default function Settings() {
         <p className="text-muted-foreground">Contas de email e integrações externas.</p>
       </div>
 
-      <Tabs defaultValue="email" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
-          <TabsTrigger value="email" className="gap-2">
-            <Mail className="h-4 w-4" />
-            Email (SMTP)
-          </TabsTrigger>
+      {/* Tab "Email (SMTP)" condicionada à feature flag ENABLE_CAMPAIGNS:
+          quando off, a tab nem aparece, defaultValue cai pra "integrations"
+          e o grid colapsa pra 1 coluna. useEmailAccounts.useQuery já tem
+          `enabled: ENABLE_CAMPAIGNS` — sem fetch inútil. */}
+      <Tabs defaultValue={ENABLE_CAMPAIGNS ? "email" : "integrations"} className="space-y-6">
+        <TabsList className={ENABLE_CAMPAIGNS
+          ? "grid w-full grid-cols-2 lg:w-[400px]"
+          : "grid w-full grid-cols-1 lg:w-[200px]"
+        }>
+          {ENABLE_CAMPAIGNS && (
+            <TabsTrigger value="email" className="gap-2">
+              <Mail className="h-4 w-4" />
+              Email (SMTP)
+            </TabsTrigger>
+          )}
           <TabsTrigger value="integrations" className="gap-2">
             <Globe className="h-4 w-4" />
             Integrações
@@ -181,6 +191,7 @@ export default function Settings() {
         </TabsList>
 
         {/* ─────────── EMAIL TAB ─────────── */}
+        {ENABLE_CAMPAIGNS && (
         <TabsContent value="email" className="space-y-6">
           <Card>
             <CardHeader>
@@ -243,6 +254,7 @@ export default function Settings() {
             </AlertDescription>
           </Alert>
         </TabsContent>
+        )}
 
         {/* ─────────── INTEGRATIONS TAB ─────────── */}
         <TabsContent value="integrations" className="space-y-6">

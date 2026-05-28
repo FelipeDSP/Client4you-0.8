@@ -15,6 +15,7 @@ import { useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { usePlanPermissions } from "@/hooks/usePlanPermissions";
+import { ENABLE_CAMPAIGNS } from "@/lib/featureFlags";
 import {
   Sidebar,
   SidebarContent,
@@ -52,6 +53,8 @@ const baseItems = [
 ];
 
 // Itens com controle de acesso (Ferramentas)
+// "Campanhas de Email" é incluído condicionalmente pela feature flag
+// ENABLE_CAMPAIGNS — quando off, o item nem aparece no menu.
 const featureItems = [
   {
     title: "Buscar Leads",
@@ -67,13 +70,13 @@ const featureItems = [
     requiredPlan: null,
     feature: 'leads' as const,
   },
-  {
+  ...(ENABLE_CAMPAIGNS ? [{
     title: "Campanhas de Email",
     url: "/email-campaigns",
     icon: Mail,
     requiredPlan: null,
     feature: 'leads' as const, // mesma permissão por enquanto
-  },
+  }] : []),
 ];
 
 // Itens de conta

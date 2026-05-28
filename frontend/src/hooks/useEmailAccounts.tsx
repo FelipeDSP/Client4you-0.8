@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { ENABLE_CAMPAIGNS } from "@/lib/featureFlags";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
 
@@ -62,6 +63,9 @@ export function useEmailAccounts() {
       return res.json();
     },
     staleTime: 1000 * 30,
+    // Feature flag: quando ENABLE_CAMPAIGNS=false o endpoint retorna 404
+    // (rota não registrada no backend). Evita request inútil + erro silencioso.
+    enabled: ENABLE_CAMPAIGNS,
   });
 
   const createMutation = useMutation({

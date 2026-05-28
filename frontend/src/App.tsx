@@ -9,6 +9,7 @@ import React from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SubscriptionProvider } from "@/hooks/useSubscription";
 import { PageTitleProvider } from "@/contexts/PageTitleContext";
+import { ENABLE_CAMPAIGNS } from "@/lib/featureFlags";
 
 
 // Lazy load das páginas
@@ -200,14 +201,22 @@ const AppRoutes = () => (
         </ProtectedRoute>
       }
     />
+    {/* Rota de Campanhas condicional à feature flag.
+        Quando off: acesso direto via URL redireciona pro dashboard
+        (sem página em branco nem 404 confuso). Página EmailCampaigns
+        continua existindo no código pra reativação rápida. */}
     <Route
       path="/email-campaigns"
       element={
-        <ProtectedRoute>
-          <MainLayout>
-            <EmailCampaigns />
-          </MainLayout>
-        </ProtectedRoute>
+        ENABLE_CAMPAIGNS ? (
+          <ProtectedRoute>
+            <MainLayout>
+              <EmailCampaigns />
+            </MainLayout>
+          </ProtectedRoute>
+        ) : (
+          <Navigate to="/dashboard" replace />
+        )
       }
     />
     <Route

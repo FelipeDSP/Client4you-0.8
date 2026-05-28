@@ -1,12 +1,25 @@
 import logging
+import os
+from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request, Depends, HTTPException
 from security_utils import get_authenticated_user, handle_error
 from helpers import get_db
-from firecrawl_service import extract_emails_bulk
 from dataforseo_service import search_google_maps, DataForSEOError, MAX_DEPTH
 from services.cnpj_utils import normalize_cnpj
+from services.email_enrichment import (
+    EmailEnrichmentOrchestrator,
+    SupabaseDomainEmailCache,
+)
+
+
+def _cache_ttl_days() -> int:
+    """TTL do domain_email_cache, configurável por env (default 30d)."""
+    try:
+        return int(os.getenv("EMAIL_CACHE_TTL_DAYS", "30"))
+    except (TypeError, ValueError):
+        return 30
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -197,7 +210,7 @@ async def update_lead_cnpj(
     """Atualiza CNPJ do lead manualmente. Valida dígito verificador.
 
     Multi-tenant: só atualiza se o lead pertence à mesma company. Habilita
-    o ReceitaFederalProvider numa próxima enrichment.
+    o pipeline de metadata Receita Federal numa próxima execução.
     """
     company_id = auth_user.get("company_id")
     if not company_id:
@@ -224,38 +237,129 @@ async def update_lead_cnpj(
     return {"id": lead_id, "cnpj": digits}
 
 
+def _increment_enrichment_telemetry(
+    sb_client, user_id: str, processed: int, total_cost: float, cache_hits: int,
+) -> None:
+    """Soma contadores em `user_quotas`. Best-effort — falha NÃO interrompe enrichment.
+
+    PR 4: telemetria-only. Não bloqueia. Limite mensal por plano + 402 vêm no PR 6.
+    """
+    try:
+        resp = (
+            sb_client.table("user_quotas")
+            .select("emails_enriched_used,firecrawl_credits_spent_estimated,cache_hits_count")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            logger.warning(f"telemetria enrichment: user_quota ausente user_id={user_id}")
+            return
+        row = rows[0]
+        sb_client.table("user_quotas").update({
+            "emails_enriched_used": (row.get("emails_enriched_used") or 0) + processed,
+            "firecrawl_credits_spent_estimated": (
+                float(row.get("firecrawl_credits_spent_estimated") or 0) + total_cost
+            ),
+            "cache_hits_count": (row.get("cache_hits_count") or 0) + cache_hits,
+        }).eq("user_id", user_id).execute()
+    except Exception as e:
+        logger.warning(f"telemetria enrichment falhou (não-fatal): {type(e).__name__}: {e}")
+
+
 @router.post("/enrich-emails")
 async def enrich_emails(
     request: Request,
     payload: EnrichEmailsRequest,
-    auth_user: dict = Depends(get_authenticated_user)
+    auth_user: dict = Depends(get_authenticated_user),
 ):
+    """Enriquece emails dos leads via cascata orquestrada + cache global por domínio.
+
+    Shape COMPAT com front atual (`useLeads.tsx` lê `data.updated[i].id` e
+    `data.updated[i].email`). Campos novos são aditivos — front antigo ignora,
+    front novo (PR 6) usa pra badges e indicador de cache.
+
+    PR 4 não bloqueia por quota (apenas conta). Limite e 402 entram no PR 6.
+    """
     try:
         db = get_db()
         company_id = auth_user["company_id"]
+        user_id = auth_user.get("user_id")
 
-        leads_response = db.client.table("leads")\
-            .select("id, website")\
-            .in_("id", payload.lead_ids)\
-            .eq("company_id", company_id)\
+        leads_response = (
+            db.client.table("leads")
+            .select("id, website, contact_url, cnpj")
+            .in_("id", payload.lead_ids)
+            .eq("company_id", company_id)
             .execute()
-
+        )
         leads = leads_response.data or []
 
-        # Processa todos os leads em paralelo
-        email_map = await extract_emails_bulk(leads)
+        if not leads:
+            return {"updated": [], "total_cost_usd": 0.0, "cache_hits": 0}
 
-        updated = []
-        for lead_id, email in email_map.items():
-            db.client.table("leads")\
-                .update({"email": email, "has_email": True})\
-                .eq("id", lead_id)\
-                .eq("company_id", company_id)\
+        cache = SupabaseDomainEmailCache(db.client)
+        orchestrator = EmailEnrichmentOrchestrator(
+            cache=cache,
+            cache_ttl_days=_cache_ttl_days(),
+        )
+
+        updated: list[dict] = []
+        total_cost = 0.0
+        cache_hits = 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        for lead in leads:
+            try:
+                result = await orchestrator.enrich(lead)
+            except Exception as e:
+                logger.error(
+                    f"orchestrator falhou pra lead {lead.get('id')}: "
+                    f"{type(e).__name__}: {e}"
+                )
+                continue
+
+            total_cost += result.cost_usd
+            if result.cached:
+                cache_hits += 1
+
+            updates: dict = {
+                "last_enrichment_attempted_at": now_iso,
+                "enrichment_source": result.source,
+                "enrichment_confidence": result.confidence if result.confidence > 0 else None,
+            }
+            if result.email:
+                updates["email"] = result.email
+                updates["has_email"] = True
+            # CNPJ extraído do scrape — só persiste se o lead ainda não tinha
+            if not lead.get("cnpj") and result.extracted_cnpjs:
+                updates["cnpj"] = result.extracted_cnpjs[0]
+
+            db.client.table("leads").update(updates) \
+                .eq("id", lead["id"]) \
+                .eq("company_id", company_id) \
                 .execute()
-            updated.append({"id": lead_id, "email": email})
 
-        return {"updated": updated}
+            updated.append({
+                "id": lead["id"],
+                "email": result.email,
+                "source": result.source,
+                "confidence": result.confidence if result.confidence > 0 else None,
+                "cached": result.cached,
+            })
+
+        if user_id:
+            _increment_enrichment_telemetry(
+                db.client, user_id, len(leads), total_cost, cache_hits,
+            )
+
+        return {
+            "updated": updated,
+            "total_cost_usd": round(total_cost, 4),
+            "cache_hits": cache_hits,
+        }
 
     except Exception as e:
-        logger.error(f"Error enriching emails: {e}")
+        logger.error(f"Error enriching emails: {type(e).__name__}: {e}")
         return {"updated": [], "error": str(e)}

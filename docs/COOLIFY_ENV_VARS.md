@@ -85,6 +85,11 @@ FIRECRAWL_BASE_URL=https://api.firecrawl.dev/v1
 
 # BrasilAPI base URL (mirror/teste — raramente muda)
 BRASIL_API_CNPJ_BASE=https://brasilapi.com.br/api/cnpj/v1
+
+# TTL do cache global por domínio (migration v9, PR 4)
+# Cache hit dentro deste TTL = $0 Firecrawl. Aumentar reduz custo, diminuir
+# aumenta freshness. 30 é o sweet spot pra leads B2B brasileiros.
+EMAIL_CACHE_TTL_DAYS=30
 ```
 
 ---

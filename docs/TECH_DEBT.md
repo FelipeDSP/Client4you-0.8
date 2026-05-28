@@ -90,3 +90,80 @@ estão bloqueados até resolver a ativação.
 **Quando resolver:** quando houver budget pra deposit mínimo de **$50** ou
 quando phone verification aceitar BR. Assim que ativarmos, rodar o smoke
 test em sandbox primeiro e em produção depois pra confirmar campos.
+
+---
+
+## 5. Avaliar migração DataForSEO → Serper pra descoberta de leads
+
+A fonte de descoberta hoje é DataForSEO (Google Maps Live Advanced). A conta
+está travada por phone verification (ver item 4), e Serper é candidato a
+substituto com **mesmo modelo PAYG, 2500 buscas grátis e menos atrito de
+onboarding**.
+
+**Por que NÃO migrar agora:**
+- DataForSEO continua funcionando em produção — só o ambiente de teste local
+  está sem créditos. Não é blocker.
+- Misturar refactor de descoberta com o refactor de email enrichment em
+  andamento (PRs 1-6) violaria o princípio de PRs pequenos e revisáveis.
+
+**Resolução proposta:**
+- Criar `backend/services/discovery_providers/` com interface
+  `LeadDiscoveryProvider` (ABC) — espelho do padrão de `EmailProvider`.
+- Adaptar `backend/dataforseo_service.py` pra implementar essa interface
+  (`DataForSEODiscoveryProvider`).
+- Criar `SerperDiscoveryProvider` plugando atrás da mesma interface.
+- Toggle via env: `LEAD_DISCOVERY_PROVIDER=dataforseo|serper` (default
+  `dataforseo` no primeiro deploy, virar `serper` quando validado).
+
+**Quando:** PR separado **após** o PR 6 do refactor de email enrichment
+(numerar como PR 7). Não inserir no meio da sequência atual.
+
+---
+
+## 6. Quota de email enrichment ainda não bloqueia
+
+A migration v10 (PR 4) adicionou `user_quotas.emails_enriched_used`,
+`firecrawl_credits_spent_estimated`, `cache_hits_count`. O orchestrator
+incrementa os 3 atomicamente após cada enrichment, mas **NÃO bloqueia o
+usuário** por agora — não há limite por plano configurado.
+
+**Por que adiar o bloqueio:**
+
+- O endpoint atual é síncrono e o frontend não trata `402` específico de
+  quota de enrichment. Bloquear no PR 4 quebra UX silenciosamente.
+- O front recebe campos novos (`source`, `confidence`, `cached`) aditivos,
+  mas a UI de "Reenriquecer" / sub-quota separada só entra no PR 6.
+
+**Resolução proposta (PR 6):**
+
+- Mapear limites por plano no backend (ex: demo=10, básico=100, intermediário=500).
+- Validar `emails_enriched_used >= limite` no início do endpoint e retornar
+  `402` com mensagem específica.
+- Sub-quota separada (~10/mês) pro botão "Reenriquecer" do plano intermediário+
+  forçar bypass do cache (cliente quer dado fresco).
+- Frontend trata `402` com toast + modal de upgrade.
+
+**Hoje a telemetria já está armazenada** — quando o PR 6 ligar o gate,
+usuários que estão consumindo MUITO já têm o histórico no `user_quotas`
+pra avaliar planos.
+
+---
+
+## 7. ADR-001 referencia cobertura de cache de ~70%+ sem dados reais ainda
+
+O `docs/ADR-001-fontes-de-dados.md` justifica adotar Firecrawl como custo
+fixo apoiado na premissa de que cache hit rate vai estabilizar em ≥70% em
+steady state (franquias, redes, domínios populares compartilham scrape).
+
+**Esta premissa NÃO foi medida** — é estimativa baseada em distribuição
+heurística de leads. Pode ser superotimista pra carteiras de clientes que
+buscam empresas únicas (nichos B2B muito segmentados).
+
+**Quando reavaliar:** após 1 mês de produção do PR 4 com volume
+significativo (>1000 enrichments). Métrica: `cache_hits_count / emails_enriched_used`.
+
+Se <40%, considerar:
+- Pre-warming do cache em background pra domínios de buscas top
+- Negociar plano Firecrawl maior antes de subir preço pro cliente
+- Self-hosted Firecrawl (já tem repo open-source) — troca cobrança mensal por
+  hosting + storage próprio

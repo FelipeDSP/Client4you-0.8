@@ -44,7 +44,6 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         'reenrich_limit': 0,
         'campaigns_limit': 1,
         'messages_limit': 50,
-        'whatsapp_instances': 0,
     },
     'basico': {
         'name': 'Plano Básico',
@@ -53,7 +52,6 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         'reenrich_limit': 0,
         'campaigns_limit': 0,
         'messages_limit': 0,
-        'whatsapp_instances': 0,
     },
     'intermediario': {
         'name': 'Plano Intermediário',
@@ -62,7 +60,6 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         'reenrich_limit': 10,
         'campaigns_limit': -1,
         'messages_limit': -1,
-        'whatsapp_instances': 0,
     },
 }
 
@@ -76,7 +73,6 @@ SUSPENDED_LIMITS: Dict[str, Any] = {
     'reenrich_limit': 0,
     'campaigns_limit': 0,
     'messages_limit': 0,
-    'whatsapp_instances': 0,
 }
 
 

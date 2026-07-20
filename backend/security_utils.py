@@ -632,10 +632,11 @@ async def validate_quota_for_action(
         required_plan_lower = [p.lower() for p in required_plan]
 
         if user_plan_normalized not in required_plan_lower:
+            # Nomes de exibição vêm da fonte única (plans.PLAN_LIMITS), não
+            # hardcoded aqui — evita divergir de "Plano Básico"/"Plano Intermediário".
+            from plans import PLAN_LIMITS
             plan_display_names = {
-                'demo': 'Demo',
-                'basico': 'Básico',
-                'intermediario': 'Intermediário',
+                key: cfg.get('name', key.title()) for key, cfg in PLAN_LIMITS.items()
             }
             user_plan_display = plan_display_names.get(user_plan_normalized, user_plan_normalized.title())
             required_display = ', '.join([plan_display_names.get(p, p.title()) for p in required_plan_lower])

@@ -57,7 +57,7 @@ _check_worker_assumption()
 ENABLE_CAMPAIGNS = os.environ.get("ENABLE_CAMPAIGNS", "false").lower() == "true"
 
 # Create the main app instance
-app = FastAPI(title="Lead Dispatcher API", version="2.2.0")
+app = FastAPI(title="Client4you API", version="3.0.0")
 
 if not ENABLE_CAMPAIGNS:
     logger.info(

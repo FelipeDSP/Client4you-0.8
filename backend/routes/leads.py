@@ -42,23 +42,24 @@ async def _check_enrichment_quota(
 ) -> None:
     """Levanta HTTPException 402 se a quota da action está esgotada/indisponível.
 
-    `action` é 'email_enrich' OU 'reenrich' (PR 6). Mensagem do detail é
-    consumida pelo frontend (toast/modal de upgrade).
+    `action` é 'email_enrich' OU 'reenrich' (PR 6). `leads_count` é o tamanho
+    do batch — passado ao check_quota como `requested` pra impedir burla por
+    lote único (achado P0 #2 da auditoria: 499/500 + batch 1000 = passava).
+
+    Mensagem do detail é consumida pelo frontend (toast/modal de upgrade).
     """
-    check = await db.check_quota(user_id, action)
+    check = await db.check_quota(user_id, action, requested=leads_count)
     if check.get('allowed'):
         return
-    limit = check.get('limit', 0)
-    used = check.get('used', 0)
-    reason = check.get('reason', '')
     raise HTTPException(
         status_code=402,
         detail={
-            "reason": reason,
+            "reason": check.get('reason', ''),
             "action": action,
-            "limit": limit,
-            "used": used,
-            "requested": leads_count,
+            "limit": check.get('limit', 0),
+            "used": check.get('used', 0),
+            "requested": check.get('requested', leads_count),
+            "remaining": check.get('remaining', 0),
         },
     )
 

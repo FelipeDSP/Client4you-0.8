@@ -40,24 +40,66 @@ class _StubProvider(EmailProvider):
 
 
 class _FakeSupabase:
-    """Wrapper minimalista do supabase-py: suporta select/update/insert/eq.
+    """Wrapper minimalista do supabase-py: suporta select/update/insert/eq + RPC.
 
     Tabelas suportadas: enrichment_jobs, leads, user_quotas, domain_email_cache.
     Tudo em dict; sem SQL real, sem RLS, sem triggers.
+
+    RPC suportada: `increment_quota_atomic` (migration v14). Aplica o
+    incremento direto na tabela `user_quotas` em memória — simula o
+    comportamento atômico do Postgres real. Testes que querem exercitar o
+    fallback read-then-write podem instanciar com `rpc_enabled=False`.
     """
 
-    def __init__(self, tables: Optional[dict[str, list[dict]]] = None):
+    def __init__(
+        self,
+        tables: Optional[dict[str, list[dict]]] = None,
+        rpc_enabled: bool = True,
+    ):
         self.tables = tables or {
             "enrichment_jobs": [],
             "leads": [],
             "user_quotas": [],
             "domain_email_cache": [],
         }
+        self.rpc_enabled = rpc_enabled
 
     def table(self, name: str):
         if name not in self.tables:
             self.tables[name] = []
         return _FakeQuery(self, name)
+
+    def rpc(self, name: str, params: dict):
+        return _FakeRpc(self, name, params)
+
+
+class _FakeRpc:
+    def __init__(self, parent: _FakeSupabase, name: str, params: dict):
+        self._p = parent
+        self._name = name
+        self._params = params
+
+    def execute(self):
+        if not self._p.rpc_enabled:
+            raise RuntimeError("RPC disabled in this fake")
+        if self._name == "increment_quota_atomic":
+            user_id = self._params["p_user_id"]
+            field = self._params["p_field"]
+            amount = self._params["p_amount"]
+            # Whitelist mínima — espelha a função SQL pra detectar typo em teste
+            valid = {
+                "leads_used", "campaigns_used", "messages_sent",
+                "emails_enriched_used", "cache_hits_count",
+                "firecrawl_credits_spent_estimated", "reenrich_used",
+            }
+            if field not in valid:
+                raise ValueError(f"increment_quota_atomic: campo invalido {field}")
+            for row in self._p.tables["user_quotas"]:
+                if row.get("user_id") == user_id:
+                    row[field] = (row.get(field) or 0) + amount
+                    break
+            return SimpleNamespace(data=None)
+        raise NotImplementedError(f"FakeRpc: {self._name}")
 
 
 class _FakeQuery:
@@ -425,6 +467,59 @@ async def test_process_batch_force_bypasses_cache():
     job = sb.tables["enrichment_jobs"][0]
     assert job["result_email"] == "fresh@empresa.com.br"
     assert job["result_cached"] is False
+
+
+@pytest.mark.asyncio
+async def test_process_batch_falls_back_when_rpc_missing():
+    """Migration v14 ainda não aplicada → fallback read-then-write produz
+    mesmo resultado final (mas log ERROR aparece). Garante que o deploy é
+    seguro mesmo com janela onde código novo está rodando + migration pendente."""
+    sb = _FakeSupabase(rpc_enabled=False)
+    _seed_batch(sb, "b1", "c1", "u1", [
+        {"id": "L1", "company_id": "c1", "website": "https://a.com.br", "cnpj": None},
+    ])
+    sb.tables["user_quotas"][0]["reenrich_used"] = 0
+    p = _StubProvider("firecrawl_search", EmailResult(
+        email="ok@empresa.com.br", source="firecrawl_search",
+        confidence=0.9, cost_usd=0.02,
+    ))
+    orch = _mk_orchestrator([p])
+
+    await process_batch("b1", "c1", sb_client=sb, orchestrator=orch)
+
+    quota = sb.tables["user_quotas"][0]
+    assert quota["emails_enriched_used"] == 1
+    assert abs(quota["firecrawl_credits_spent_estimated"] - 0.02) < 1e-9
+
+
+@pytest.mark.asyncio
+async def test_process_batch_only_increments_cache_hits_when_positive():
+    """cache_hits_count só sobe quando houve hits. firecrawl_credits só sobe
+    quando custou. Evita RPC desnecessária (3 chamadas viram 1 ou 2)."""
+    sb = _FakeSupabase()
+    _seed_batch(sb, "b1", "c1", "u1", [
+        {"id": "L1", "company_id": "c1", "website": "https://a.com.br", "cnpj": None},
+    ])
+
+    # Provider que devolve cache_hit virtual via orchestrator
+    from datetime import datetime, timezone
+    from services.email_enrichment.domain_cache import CacheEntry
+    cache = InMemoryDomainEmailCache()
+    await cache.upsert("a.com.br", CacheEntry(
+        email="cached@a.com.br", source="firecrawl_search",
+        confidence=0.9, cost_usd=0.0,
+        scraped_at=datetime.now(timezone.utc),
+    ))
+    p = _StubProvider("never", None)
+    orch = EmailEnrichmentOrchestrator(cache=cache, providers=[p])
+
+    await process_batch("b1", "c1", sb_client=sb, orchestrator=orch)
+
+    quota = sb.tables["user_quotas"][0]
+    assert quota["emails_enriched_used"] == 1
+    assert quota["cache_hits_count"] == 1
+    # cost_usd=0 (cache hit) → contador não é incrementado
+    assert quota["firecrawl_credits_spent_estimated"] == 0.0
 
 
 @pytest.mark.asyncio

@@ -32,8 +32,9 @@ async def check_quota_endpoint(
     auth_user: dict = Depends(get_authenticated_user)
 ):
     """
-    Actions suportadas hoje: `search_leads` / `lead_search`.
-    Outras (email-related) entram na Fase 1.
+    Actions suportadas: `search_leads`/`lead_search`, `email_enrich`, `reenrich`
+    e os aliases de campanha (`campaign_send`/`message_send`, atrás de
+    ENABLE_CAMPAIGNS). Mapeamento canônico em `supabase_service.check_quota`.
     """
     try:
         db = get_db()

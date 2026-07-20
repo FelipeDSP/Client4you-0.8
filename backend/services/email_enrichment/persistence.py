@@ -57,6 +57,46 @@ def persist_lead_enrichment(
         raise
 
 
+def _rpc_increment(sb_client, user_id: str, field: str, amount) -> bool:
+    """Helper local — dispara o mesmo RPC `increment_quota_atomic` da migration v14.
+
+    Mantido aqui pra evitar dependência circular com `supabase_service` (que
+    importaria persistence em alguns lugares). Mesmo contrato: tenta RPC,
+    cai em read-then-write se RPC ausente, loga ERROR no fallback.
+    """
+    try:
+        sb_client.rpc('increment_quota_atomic', {
+            'p_user_id': user_id,
+            'p_field': field,
+            'p_amount': amount,
+        }).execute()
+        return True
+    except Exception as rpc_err:
+        logger.error(
+            f"RPC increment_quota_atomic falhou em {field} ({rpc_err}) — fallback "
+            f"NÃO-ATÔMICO. Aplique docs/migration_v14_quota_atomic.sql."
+        )
+        try:
+            resp = (
+                sb_client.table("user_quotas")
+                .select(field)
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            rows = resp.data or []
+            if not rows:
+                return False
+            current = rows[0].get(field) or 0
+            sb_client.table("user_quotas").update({
+                field: current + amount,
+            }).eq("user_id", user_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Fallback increment {field} também falhou: {e}")
+            return False
+
+
 def increment_enrichment_telemetry(
     sb_client,
     user_id: Optional[str],
@@ -65,47 +105,25 @@ def increment_enrichment_telemetry(
     cache_hits: int,
     reenrich: bool = False,
 ) -> None:
-    """Soma contadores em `user_quotas`. Best-effort — falha NÃO interrompe.
+    """Soma contadores em `user_quotas` via RPC atômico (migration v14).
 
     Quando `reenrich=True`, incrementa `reenrich_used` em vez de
     `emails_enriched_used` (sub-quota separada do botão "Reenriquecer", PR 6).
     Reenrichment força bypass cache → `cache_hits_count` não sobe nessa rota.
     `firecrawl_credits_spent_estimated` continua subindo (telemetria geral).
+
+    Best-effort — falha em incrementos individuais NÃO interrompe o batch
+    (orchestrator já rodou e cobrou Firecrawl). Cada campo é uma RPC separada;
+    erro em 1 não bloqueia os outros.
     """
-    if not user_id:
+    if not user_id or processed <= 0:
         return
-    try:
-        select_cols = (
-            "emails_enriched_used,reenrich_used,firecrawl_credits_spent_estimated,cache_hits_count"
-        )
-        resp = (
-            sb_client.table("user_quotas")
-            .select(select_cols)
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        rows = resp.data or []
-        if not rows:
-            logger.warning(f"telemetria enrichment: user_quota ausente user_id={user_id}")
-            return
-        row = rows[0]
-        new_cost = float(row.get("firecrawl_credits_spent_estimated") or 0) + total_cost
 
-        if reenrich:
-            updates = {
-                "reenrich_used": (row.get("reenrich_used") or 0) + processed,
-                "firecrawl_credits_spent_estimated": new_cost,
-            }
-        else:
-            updates = {
-                "emails_enriched_used": (row.get("emails_enriched_used") or 0) + processed,
-                "firecrawl_credits_spent_estimated": new_cost,
-                "cache_hits_count": (row.get("cache_hits_count") or 0) + cache_hits,
-            }
+    quota_field = "reenrich_used" if reenrich else "emails_enriched_used"
+    _rpc_increment(sb_client, user_id, quota_field, processed)
 
-        sb_client.table("user_quotas").update(updates).eq("user_id", user_id).execute()
-    except Exception as e:
-        logger.warning(
-            f"telemetria enrichment falhou (não-fatal): {type(e).__name__}: {e}"
-        )
+    if total_cost > 0:
+        _rpc_increment(sb_client, user_id, "firecrawl_credits_spent_estimated", total_cost)
+
+    if not reenrich and cache_hits > 0:
+        _rpc_increment(sb_client, user_id, "cache_hits_count", cache_hits)

@@ -217,10 +217,20 @@ class SupabaseService:
             'subscription_status': status,
         }
     
-    async def check_quota(self, user_id: str, action: str) -> Dict[str, Any]:
+    async def check_quota(self, user_id: str, action: str, requested: int = 1) -> Dict[str, Any]:
         """
         Check if user can perform action.
         Combina contadores (user_quotas) + plano (subscriptions) + limites (PLAN_LIMITS).
+
+        Args:
+            user_id: id do usuário
+            action: alias da ação ('lead_search', 'email_enrich', 'reenrich', ...)
+            requested: quantidade que será consumida na operação. Default 1
+                preserva semântica antiga pra callers single-shot. Endpoints de
+                batch (enrich-emails síncrono e async, search com depth) DEVEM
+                passar o tamanho real do batch — senão usuário com 499/500 pode
+                disparar lote de 1000 e burlar o limite numa request só.
+                (Achado P0 #2 da auditoria pós-PR 6.)
         """
         try:
             full_quota = await self.get_user_quota_with_plan(user_id)
@@ -255,17 +265,35 @@ class SupabaseService:
             limit_field, used_field = action_map[action]
             limit = full_quota.get(limit_field, 0) or 0
             used = full_quota.get(used_field, 0) or 0
+            requested = max(1, int(requested))  # robustez contra 0/negativo
 
             if limit == -1:
-                return {'allowed': True, 'reason': 'Ilimitado', 'limit': -1, 'used': used, 'unlimited': True}
+                return {
+                    'allowed': True, 'reason': 'Ilimitado',
+                    'limit': -1, 'used': used, 'requested': requested, 'unlimited': True,
+                }
 
             if limit == 0:
-                return {'allowed': False, 'reason': 'Recurso não disponível no seu plano', 'limit': 0, 'used': used}
+                return {
+                    'allowed': False, 'reason': 'Recurso não disponível no seu plano',
+                    'limit': 0, 'used': used, 'requested': requested,
+                }
 
-            if used >= limit:
-                return {'allowed': False, 'reason': f'Limite atingido ({used}/{limit})', 'limit': limit, 'used': used}
+            # Compara `used + requested` em vez de só `used`.
+            # Antes: usuário 499/500 podia mandar batch de 1000 leads, passar
+            # o check (used < limit) e processar tudo. Agora bloqueia: 499+1000>500.
+            if used + requested > limit:
+                remaining = max(0, limit - used)
+                return {
+                    'allowed': False,
+                    'reason': f'Limite atingido ({used}/{limit}). Solicitou {requested}, restam {remaining}.',
+                    'limit': limit, 'used': used, 'requested': requested, 'remaining': remaining,
+                }
 
-            return {'allowed': True, 'reason': f'OK ({used}/{limit})', 'limit': limit, 'used': used}
+            return {
+                'allowed': True, 'reason': f'OK ({used}+{requested}/{limit})',
+                'limit': limit, 'used': used, 'requested': requested,
+            }
 
         except Exception as e:
             logger.error(f"Error checking quota: {e}")
@@ -274,7 +302,14 @@ class SupabaseService:
     
     async def increment_quota(self, user_id: str, action: str, amount: int = 1) -> bool:
         """
-        Increment quota usage atomically via RPC (com fallback read-then-write).
+        Increment quota usage atomically via RPC `increment_quota_atomic`
+        (migration v14). RPC roda UPDATE direto no Postgres, imune a race
+        entre workers/requests concorrentes.
+
+        Fallback read-then-write existe pra cobrir janela de deploy onde o
+        código novo subiu antes da migration. Em condição normal o RPC
+        funciona; fallback dispara ERROR no log pra alertar.
+
         Atenção: campo de mensagens é `messages_sent`, não `messages_used`.
         """
         try:
@@ -296,31 +331,53 @@ class SupabaseService:
                 logger.warning(f"Action {action} not mapped for quota increment")
                 return True
 
-            # Use atomic RPC function (prevents race conditions)
-            try:
-                self.client.rpc('increment_quota_atomic', {
-                    'p_user_id': user_id,
-                    'p_field': used_field,
-                    'p_amount': amount,
-                }).execute()
-                return True
-            except Exception as rpc_err:
-                # Fallback: direct update if RPC not yet deployed
-                logger.warning(f"RPC increment_quota_atomic not available, using fallback: {rpc_err}")
-                quota = await self.get_user_quota(user_id)
-                if not quota:
-                    return False
-                current_value = quota.get(used_field, 0) or 0
-                new_value = current_value + amount
-                self.client.table('user_quotas')\
-                    .update({used_field: new_value})\
-                    .eq('user_id', user_id)\
-                    .execute()
-                return True
+            return self._increment_atomic(user_id, used_field, amount)
 
         except Exception as e:
             logger.error(f"Error incrementing quota: {e}")
             return False
+
+    def _increment_atomic(self, user_id: str, field: str, amount) -> bool:
+        """RPC atômico em user_quotas.{field}. Fallback NÃO-atômico se RPC ausente.
+
+        Helper público pra services/email_enrichment/persistence.py incrementar
+        múltiplos campos (emails_enriched_used + firecrawl_credits + cache_hits)
+        sem replicar o try/except do fallback.
+        """
+        try:
+            self.client.rpc('increment_quota_atomic', {
+                'p_user_id': user_id,
+                'p_field': field,
+                'p_amount': amount,
+            }).execute()
+            return True
+        except Exception as rpc_err:
+            # Migration v14 ainda não aplicada → cai no read-then-write.
+            # ERROR (não warning) pra ficar visível no log do Coolify até
+            # alguém aplicar a migration.
+            logger.error(
+                f"RPC increment_quota_atomic falhou ({rpc_err}) — usando fallback "
+                f"NÃO-ATÔMICO em {field}. Aplique docs/migration_v14_quota_atomic.sql."
+            )
+            try:
+                resp = (
+                    self.client.table('user_quotas')
+                    .select(field)
+                    .eq('user_id', user_id)
+                    .limit(1)
+                    .execute()
+                )
+                rows = resp.data or []
+                if not rows:
+                    return False
+                current = rows[0].get(field) or 0
+                self.client.table('user_quotas').update({
+                    field: current + amount,
+                }).eq('user_id', user_id).execute()
+                return True
+            except Exception as fallback_err:
+                logger.error(f"Fallback de increment também falhou: {fallback_err}")
+                return False
     
     async def upgrade_plan(self, user_id: str, plan_type: str, plan_name: str = None) -> bool:
         """

@@ -141,6 +141,26 @@ Resumo:
 
 Se reabrir, criar ADR-003 documentando o gatilho.
 
+**Atualização (2026-07-20): Serper e Scrappa plugados como fontes de DEV/TESTE.**
+Para desenvolver sem depender da conta DataForSEO travada, duas fontes
+alternativas foram integradas, selecionáveis por `LEAD_SOURCE`
+(`backend/serper_service.py`, `backend/scrappa_service.py` + `backend/lead_source.py`).
+**Escopo deliberado: apenas dev/teste** — o default continua `dataforseo` e a
+decisão de PRODUÇÃO do [`ADR-002`](ADR-002-fonte-de-descoberta.md) (DataForSEO
+canônico) **segue em aberto/inalterada**. Pontos que continuam dívida:
+
+- **Serper** (`LEAD_SOURCE=serper`) **não pagina** (uma chamada ≈ 20 places,
+  `MAX_DEPTH = 20`). Há um `TODO(paginação)` no topo de `serper_service.py`; não
+  implementado de propósito (ADR-002 §2). Créditos grátis são one-time.
+- **Scrappa** (`LEAD_SOURCE=scrappa`) devolve até **200 results/request**
+  (`MAX_DEPTH = 200`) e tem **500 créditos/mês recorrente** — plugado por ser
+  melhor pra ambiente de teste durável (validado por chamada real em 2026-07-20:
+  `limit=50` retornou 50). Nuance mapeada: categoria vem de `subtypes[0]`, não
+  de `type` (que é o termo de busca genérico).
+- Decisão de fonte **para produção** permanece a do ADR-002. Scrappa tem números
+  atraentes (200/request, 1 crédito, tier recorrente) e PODERIA ser candidato de
+  produção — mas isso é decisão separada; se for reaberta, documentar em ADR-003.
+
 A pendência operacional do DataForSEO (verificação BR — item 4 abaixo)
 continua sendo um blocker de produção, **resolvível** via ticket de suporte
 OU depósito mínimo $50.

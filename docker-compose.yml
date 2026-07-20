@@ -13,11 +13,19 @@ services:
       - SUPABASE_KEY=${SUPABASE_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
-      # Firecrawl
+      # Firecrawl (enrichment de e-mail)
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
-      # WhatsApp (WAHA)
-      - WAHA_DEFAULT_URL=${WAHA_DEFAULT_URL}
-      - WAHA_MASTER_KEY=${WAHA_MASTER_KEY}
+      - EMAIL_CACHE_TTL_DAYS=${EMAIL_CACHE_TTL_DAYS:-30}
+      # DataForSEO (descoberta de leads — Google Maps)
+      - DATAFORSEO_LOGIN=${DATAFORSEO_LOGIN}
+      - DATAFORSEO_PASSWORD=${DATAFORSEO_PASSWORD}
+      - DATAFORSEO_BASE_URL=${DATAFORSEO_BASE_URL:-https://api.dataforseo.com/v3}
+      # Receita Federal (CNPJ → metadados)
+      - BRASIL_API_CNPJ_BASE=${BRASIL_API_CNPJ_BASE:-https://brasilapi.com.br/api/cnpj/v1}
+      # Criptografia de segredos (senhas SMTP em email_accounts)
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # Feature flag: campanhas de e-mail (default off — ver docs/FEATURE_FLAGS.md)
+      - ENABLE_CAMPAIGNS=${ENABLE_CAMPAIGNS:-false}
       # Kiwify
       - KIWIFY_WEBHOOK_SECRET=${KIWIFY_WEBHOOK_SECRET}
       # E-mail (SMTP)
@@ -31,8 +39,6 @@ services:
       # URLs
       - FRONTEND_URL=${FRONTEND_URL}
       - CORS_ORIGINS=${CORS_ORIGINS}
-      # N8N (opcional)
-      - N8N_CAMPAIGN_WEBHOOK_URL=${N8N_CAMPAIGN_WEBHOOK_URL}
       # Segurança
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
@@ -60,9 +66,7 @@ services:
         - VITE_BACKEND_URL=${VITE_BACKEND_URL}
         - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
         - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
-        - VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID}
-        - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
-        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
+        - VITE_ENABLE_CAMPAIGNS=${VITE_ENABLE_CAMPAIGNS:-false}
     restart: unless-stopped
     expose:
       - "80"

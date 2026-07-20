@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
 from security_utils import get_authenticated_user, handle_error
 from helpers import get_db
-from dataforseo_service import search_google_maps, DataForSEOError, MAX_DEPTH
+from lead_source import search_google_maps, MAX_DEPTH, LeadSourceError
 from services.cnpj_utils import normalize_cnpj
 from services.email_enrichment import (
     EmailEnrichmentOrchestrator,
@@ -168,10 +168,10 @@ async def search_leads(
             raise HTTPException(status_code=500, detail="Falha ao registrar a busca")
         search_id = history.data[0]["id"]
 
-    # ── 3) DataForSEO ─────────────────────────────────────────────────────
+    # ── 3) Descoberta (DataForSEO ou Serper, via LEAD_SOURCE) ─────────────
     try:
         raw_leads = await search_google_maps(query, location, depth)
-    except DataForSEOError as e:
+    except LeadSourceError as e:
         status = 500 if e.configuration else 503
         raise HTTPException(status_code=status, detail=str(e))
 

@@ -24,7 +24,7 @@ class EmailService:
         self.from_email = os.getenv('SMTP_FROM_EMAIL')
         self.from_name = os.getenv('SMTP_FROM_NAME', 'Client4You')
         self.use_tls = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
-        self.frontend_url = os.getenv('FRONTEND_URL', 'https://leadpro-check.preview.emergentagent.com')
+        self.frontend_url = os.getenv('FRONTEND_URL', 'https://app.client4you.com.br')
         self.jinja_env = Environment(autoescape=True)
         
         if not all([self.smtp_host, self.smtp_user, self.smtp_password]):

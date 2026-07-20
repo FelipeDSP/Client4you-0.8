@@ -356,13 +356,15 @@ async def kiwify_webhook(
                     features.append("") # Linha em branco
                 
                 features.append(f"✓ Plano: {plan_config.get('name', plan_key)}")
-                
-                if plan_config.get('leads_limit') == -1:
-                    features.append("✓ Buscas de leads ilimitadas")
-                
-                if plan_config.get('campaigns_limit', 0) == -1:
-                    features.append("✓ Disparador WhatsApp ilimitado")
-                
+
+                leads_limit = plan_config.get('leads_limit', 0)
+                if leads_limit and leads_limit > 0:
+                    features.append(f"✓ {leads_limit} leads/mês")
+
+                enrich_limit = plan_config.get('email_enrichment_limit', 0)
+                if enrich_limit and enrich_limit > 0:
+                    features.append(f"✓ {enrich_limit} enriquecimentos de e-mail/mês")
+
                 email_service = get_email_service()
                 
                 # Usa o método existente de confirmação, mas agora com credenciais se necessário

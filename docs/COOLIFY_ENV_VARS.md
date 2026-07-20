@@ -10,12 +10,13 @@ SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=seu-service-role-key-aqui
 SUPABASE_JWT_SECRET=seu-jwt-secret-aqui
 
-# WAHA (WhatsApp HTTP API)
-WAHA_DEFAULT_URL=https://seu-waha-server.com
-WAHA_MASTER_KEY=sua-master-key-do-waha
-
 # CORS (Frontend URL)
 CORS_ORIGINS=https://seu-dominio-frontend.com
+
+# Chave Fernet pra encriptar segredos (senhas SMTP em email_accounts).
+# Gere com: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# NUNCA mude depois de ter segredos encriptados.
+ENCRYPTION_KEY=sua-chave-fernet-base64
 ```
 
 ### ⚙️ **OPCIONAIS (com valores padrão):**
@@ -136,10 +137,9 @@ VITE_ENABLE_CAMPAIGNS=false
 - `SUPABASE_SERVICE_ROLE_KEY`: service_role (secret)
 - `SUPABASE_JWT_SECRET`: JWT Secret
 
-### **2. WAHA:**
-- Se você tem servidor WAHA próprio, use a URL dele
-- `WAHA_MASTER_KEY`: Master API Key configurada no WAHA
-- Alternativa: https://waha.chatyou.chat (se for usar serviço externo)
+### **2. DataForSEO (busca de leads):**
+- Acesse: https://app.dataforseo.com
+- `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`: credenciais da API
 
 ### **3. SMTP (Email):**
 - Gmail: Use App Password (https://myaccount.google.com/apppasswords)
@@ -215,9 +215,9 @@ curl https://seu-backend.com/api/health
 - Verificar `SUPABASE_JWT_SECRET`
 - Verificar `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`
 
-### **WhatsApp não envia:**
-- Verificar `WAHA_DEFAULT_URL` e `WAHA_MASTER_KEY`
-- Verificar se sessão do WhatsApp está conectada no WAHA
+### **Busca de leads falha:**
+- Verificar `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`
+- Verificar saldo/ativação da conta DataForSEO
 
 ### **Email não envia:**
 - Verificar todas variáveis `SMTP_*`

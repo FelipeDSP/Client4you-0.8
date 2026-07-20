@@ -238,3 +238,35 @@ Simples de explicar pro cliente, alinhado com unit economics do PR 4
   - `cache_hits_count / emails_enriched_used` por usuário
   - `firecrawl_credits_spent_estimated` médio por usuário
 - Decidir entre: subir preço, baixar limite, ou negociar plano Firecrawl maior.
+
+---
+
+## 10. Inconsistências que exigem decisão de comportamento (NÃO corrigidas na limpeza de 2026-06-09)
+
+A vistoria de inconsistências de 2026-06-09 corrigiu tudo que era seguro (código
+morto, docs, defaults, tipos de status, promessa falsa no e-mail, higiene de
+config). Os itens abaixo foram **deixados de propósito** porque alteram
+comportamento de runtime e precisam de decisão/PR coordenado:
+
+- **`/api/quotas/increment` confia em `action`+`amount` do cliente** (`quotas.py`).
+  `amount` negativo reduz o próprio contador. Convive com incremento server-side
+  autoritativo no `/search`. Decidir: remover o endpoint, ou clamp `amount>=1` +
+  validar `action`. (Também é achado de segurança.)
+- **`check_quota` fail-open em exceção** (`supabase_service.py`) e **`ENVIRONMENT`
+  default `development`** (`security_utils.py`, auth fail-open). Mudar pra
+  fail-closed pode travar dev local — fazer junto com hardening de segurança.
+- **Plano `demo`: backend ativo (50 leads) vs `usePlanPermissions` morto**
+  (`usePlanPermissions.tsx:80`). Decidir se demo existe; hoje as duas verdades
+  coexistem. Idem `leadsLimit:-1` decorativo pra básico/intermediário no mesmo hook.
+- **`_map_lead` não retorna campos de enrichment do PR6** (cnpj/source/confidence/
+  razao_social) e hardcoda `city`/`state` vazios. Mudança de shape de API → só em
+  PR coordenado com o front (regra [[feedback_read_frontend_before_api_change]]).
+- **Campo `hasWhatsApp`/`has_whatsapp`** ainda flui no contrato de leads (sempre
+  False). Remoção é mudança de shape — adiada pelo mesmo motivo.
+- **Curva de plano invertida**: demo (grátis) tem `campaigns_limit:1` e
+  `messages_limit:50`; básico (pago) tem `0`/`0` (`plans.py`). Campanhas estão
+  desligadas por flag, então não afeta uso hoje — revisar ao reativar campanhas.
+- **Dívida de schema**: `webhook_logs`/`user_quotas`/`enrichment_jobs` etc. sem
+  `CREATE TABLE` versionado (ver item 1) e `integrations/supabase/types.ts`
+  gerado cobrindo só ~7 tabelas. Regenerar os tipos do Supabase resolve o drift
+  de tipos do front.

@@ -92,7 +92,7 @@ export function AdminUsersTable({
                 </TableRow>
               ) : (
                 filteredUsers.map((user) => {
-                  const isSuspended = user.quotaStatus === 'suspended' || user.quotaStatus === 'canceled';
+                  const isSuspended = user.quotaStatus === 'suspended' || user.quotaStatus === 'expired';
                   const isExpired = user.quotaExpiresAt && new Date(user.quotaExpiresAt) < new Date();
                   
                   return (

@@ -29,7 +29,7 @@ export interface UserQuota {
   cache_hits_count?: number;
   reset_date: string;
   plan_expires_at?: string;
-  subscription_status?: 'active' | 'suspended' | 'canceled' | 'inactive';
+  subscription_status?: 'active' | 'suspended' | 'expired';
   cancellation_reason?: string;
   created_at: string;
   updated_at: string;

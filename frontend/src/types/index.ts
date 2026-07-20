@@ -61,7 +61,7 @@ export interface Company {
 export interface UserRole {
   id: string;
   userId: string;
-  role: 'super_admin' | 'company_owner' | 'admin' | 'member';
+  role: 'super_admin' | 'company_owner' | 'member' | 'user';
   companyId: string | null;
 }
 
@@ -69,7 +69,7 @@ export interface Subscription {
   id: string;
   companyId: string;
   planId: string;
-  status: 'active' | 'cancelled' | 'expired';
+  status: 'active' | 'suspended' | 'expired';
   demoUsed: boolean;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;

@@ -392,13 +392,15 @@ export default function Profile() {
                 <span className="text-slate-600">Status</span>
                 {(() => {
                   const subStatus = quota?.subscription_status || (quota ? 'active' : 'inactive');
+                  // Valores reais do backend: active (gravado), suspended (refund/cancel),
+                  // expired (computado quando não há subscription). 'inactive' = sem quota.
                   const statusMap: Record<string, { label: string; className: string }> = {
                     active: { label: 'Ativo', className: 'bg-green-50 text-green-700 ring-green-600/20' },
                     suspended: { label: 'Suspenso', className: 'bg-red-50 text-red-700 ring-red-600/20' },
-                    canceled: { label: 'Cancelado', className: 'bg-gray-50 text-gray-700 ring-gray-600/20' },
+                    expired: { label: 'Expirado', className: 'bg-orange-50 text-orange-700 ring-orange-600/20' },
                     inactive: { label: 'Inativo', className: 'bg-yellow-50 text-yellow-700 ring-yellow-600/20' },
                   };
-                  const cfg = statusMap[subStatus] || statusMap.active;
+                  const cfg = statusMap[subStatus] || statusMap.inactive;
                   return (
                     <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${cfg.className}`}>
                       {cfg.label}

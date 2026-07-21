@@ -2,16 +2,16 @@
 Scrappa.co — busca de leads no Google Maps (fonte ALTERNATIVA de dev/teste).
 
 ⚠️ DataForSEO continua sendo a fonte canônica de produção (ver ADR-002). Este
-módulo, como o serper_service, existe pra desenvolver/testar sem depender da
-conta DataForSEO travada. Escolha da fonte via `LEAD_SOURCE` (ver lead_source).
+módulo existe pra desenvolver/testar sem depender da conta DataForSEO travada.
+Escolha da fonte via `LEAD_SOURCE` (ver lead_source).
 
-Por que Scrappa além do Serper (dados da doc oficial, 2026-07-20):
-    - Tier grátis RECORRENTE: 500 créditos/mês (Serper: 2500 one-time).
-    - 1 crédito = 1 request (Serper: 3 créditos/query).
-    - `limit` de 1..200 numa única request (Serper: ~20 sem paginar).
+Por que Scrappa como fonte de dev/teste (dados da doc oficial, 2026-07-20):
+    - Tier grátis RECORRENTE: 500 créditos/mês.
+    - 1 crédito = 1 request.
+    - `limit` de 1..200 numa única request.
       → resolve volume E durabilidade do ambiente de teste.
 
-Espelha a MESMA assinatura pública do dataforseo_service/serper_service:
+Espelha a MESMA assinatura pública do dataforseo_service:
     - search_google_maps(query, location, depth) -> list[dict]
     - MAX_DEPTH
     - ScrappaError (subclasse de DataForSEOError p/ a rota capturar sem mudança)
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 SCRAPPA_MAPS_URL = "https://scrappa.co/api/maps/simple-search"
 
 # Teto de resultados por UMA request ao simple-search (doc: limit 1..200).
-# Diferente do Serper, aqui o depth é honrado de verdade até 200 numa chamada.
+# O depth é honrado de verdade até 200 numa única chamada.
 MAX_DEPTH = 200
 
 
@@ -46,8 +46,9 @@ class ScrappaError(DataForSEOError):
     """Erro de configuração ou da API Scrappa.
 
     Herda de DataForSEOError de propósito: a rota captura a base via
-    `LeadSourceError`, então as três fontes compartilham o mesmo tratamento
-    (500 se `configuration=True`, senão 503). O tipo distinto mantém logs legíveis.
+    `LeadSourceError`, então as duas fontes (DataForSEO e Scrappa) compartilham
+    o mesmo tratamento (500 se `configuration=True`, senão 503). O tipo distinto
+    mantém os logs legíveis.
     """
 
 
@@ -57,6 +58,14 @@ def _api_key() -> str:
         logger.error("SCRAPPA_API_KEY ausente — busca via Scrappa desabilitada")
         raise ScrappaError("Serviço de busca não configurado", configuration=True)
     return key
+
+
+def _coord(value) -> float | None:
+    """Coerce uma coordenada pra float; None se ausente/inválida."""
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _normalize_item(item: dict, fallback_category: str) -> dict:
@@ -70,7 +79,10 @@ def _normalize_item(item: dict, fallback_category: str) -> dict:
       - `type` é o termo de busca genérico ("restaurantes"), IGUAL pra todos os
         resultados. A categoria específica do negócio está em `subtypes[0]`
         ("Restaurante", "Churrascaria", ...) — é o que usamos, pra casar com a
-        semântica do DataForSEO/Serper. Fallback: type → fallback_category.
+        semântica do DataForSEO. Fallback: type → fallback_category.
+      - `latitude`/`longitude` são floats no topo do item (VERIFICADO por
+        chamada real: -9.914983 / -63.048057 = Ariquemes RO). Alimentam o pin
+        do lead no mini-mapa (migration v15).
 
     Produz EXATAMENTE as mesmas chaves que
     `dataforseo_service._normalize_item`. Campos que o Scrappa Maps não fornece
@@ -94,6 +106,8 @@ def _normalize_item(item: dict, fallback_category: str) -> dict:
         "email": None,
         "has_email": False,
         "contact_url": None,
+        "latitude": _coord(item.get("latitude")),
+        "longitude": _coord(item.get("longitude")),
     }
 
 

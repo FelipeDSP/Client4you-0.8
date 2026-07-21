@@ -104,6 +104,8 @@ export function useLeads() {
         reviews: lead.reviews_count || 0,
         category: lead.category || "",
         website: lead.website,
+        lat: lead.latitude ?? null,
+        lng: lead.longitude ?? null,
         extractedAt: lead.created_at,
         searchId: lead.search_id || undefined,
         companyId: lead.company_id,

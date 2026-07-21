@@ -13,6 +13,8 @@ export interface Lead {
   reviews: number;
   category: string;
   website: string | null;
+  lat?: number | null;
+  lng?: number | null;
   extractedAt: string;
   searchId?: string;
   companyId?: string;

@@ -48,12 +48,26 @@ def _credentials() -> str:
     return base64.b64encode(f"{login}:{password}".encode()).decode()
 
 
+def _coord(value) -> float | None:
+    """Coerce uma coordenada pra float; None se ausente/inválida."""
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_item(item: dict, fallback_category: str) -> dict:
     """Mapeia um item do DataForSEO para as colunas da tabela `leads`.
 
     Campos novos (PR 2): `contact_url` é persistido (migration v7) e usado
     pelo DataForSEOContactUrlProvider como seed prioritária de scrape.
     `domain` NÃO é persistido — derivado de website via validators.get_domain.
+
+    `latitude`/`longitude` (migration v15): campos do schema oficial do
+    DataForSEO Google Maps live/advanced (floats no topo do item). Como a conta
+    está travada, NÃO foi possível verificar por chamada real — smoke-testar com
+    scripts/smoke_test_dataforseo.py quando destravar. `_coord` blinda o insert
+    caso o nome do campo difira (cai em None, não quebra a busca).
     """
     rating = item.get("rating") or {}
     return {
@@ -68,6 +82,8 @@ def _normalize_item(item: dict, fallback_category: str) -> dict:
         "email": None,
         "has_email": False,
         "contact_url": item.get("contact_url") or None,
+        "latitude": _coord(item.get("latitude")),
+        "longitude": _coord(item.get("longitude")),
     }
 
 

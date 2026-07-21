@@ -25,6 +25,8 @@ ITEM_SEM_WEBSITE = {
     "type": "restaurantes",
     "subtypes": ["Restaurante", "Churrascaria"],
     "business_id": "0x93cc90bf38241321:0x92b4ed6848f63db9",
+    "latitude": -9.914983,
+    "longitude": -63.048057,
 }
 
 # Com website (Instagram) e telefone.
@@ -37,6 +39,8 @@ ITEM_COM_WEBSITE = {
     "review_count": 924,
     "type": "restaurantes",
     "subtypes": ["Churrascaria", "Restaurante brasileiro", "Restaurante"],
+    "latitude": -9.9206401,
+    "longitude": -63.0391938,
 }
 
 # phone_numbers VAZIO e sem website.
@@ -49,6 +53,8 @@ ITEM_SEM_PHONE = {
     "review_count": 25,
     "type": "restaurantes",
     "subtypes": ["Churrascaria"],
+    "latitude": -9.9038766,
+    "longitude": -63.021487,
 }
 
 
@@ -70,7 +76,27 @@ class TestNormalizeItem:
         assert set(result.keys()) == {
             "name", "phone", "address", "website", "rating", "reviews_count",
             "category", "has_whatsapp", "email", "has_email", "contact_url",
+            "latitude", "longitude",
         }
+
+    def test_coordenadas_reais_do_topo_do_item(self):
+        """lat/lng vêm como floats no topo do item (VERIFICADO por chamada real)."""
+        result = _normalize_item(ITEM_SEM_WEBSITE, "x")
+        assert result["latitude"] == -9.914983
+        assert result["longitude"] == -63.048057
+
+    def test_coordenadas_none_quando_ausentes(self):
+        result = _normalize_item({"name": "Sem Coord"}, "x")
+        assert result["latitude"] is None
+        assert result["longitude"] is None
+
+    def test_coordenadas_coeridas_de_string(self):
+        """`_coord` tolera string numérica (blindagem), caindo em float."""
+        result = _normalize_item(
+            {"name": "X", "latitude": "-9.91", "longitude": "-63.04"}, "x"
+        )
+        assert result["latitude"] == -9.91
+        assert result["longitude"] == -63.04
 
     def test_category_usa_subtypes_nao_type(self):
         """`type` é o termo de busca genérico ('restaurantes'), igual pra todos.

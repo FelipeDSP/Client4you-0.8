@@ -87,6 +87,8 @@ def _map_lead(row: dict) -> dict:
         "reviews": row.get("reviews_count") or 0,
         "category": row.get("category") or "",
         "website": row.get("website"),
+        "lat": row.get("latitude"),
+        "lng": row.get("longitude"),
         "extractedAt": row.get("created_at"),
         "searchId": row.get("search_id"),
         "companyId": row.get("company_id"),
@@ -168,7 +170,7 @@ async def search_leads(
             raise HTTPException(status_code=500, detail="Falha ao registrar a busca")
         search_id = history.data[0]["id"]
 
-    # ── 3) Descoberta (DataForSEO ou Serper, via LEAD_SOURCE) ─────────────
+    # ── 3) Descoberta (DataForSEO ou Scrappa, via LEAD_SOURCE) ────────────
     try:
         raw_leads = await search_google_maps(query, location, depth)
     except LeadSourceError as e:

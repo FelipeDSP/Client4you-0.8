@@ -4,32 +4,28 @@ Scripts SQL aplicados **manualmente** no Supabase (SQL Editor). Não há ferrame
 de migração automática (nenhuma tabela `schema_migrations`) — a fonte de verdade
 do schema é a combinação destes arquivos aplicados na ordem abaixo.
 
-## ⚠️ Aviso importante: NÃO é possível criar o banco do zero só com estes arquivos
+## 🚀 Setup do zero → use `schema.sql`
 
-As tabelas-**núcleo** (`companies`, `profiles`, `leads`, `subscriptions`,
-`user_quotas`, `company_settings`, `audit_log`, ...) **não são criadas em nenhum
-arquivo aqui**. Elas foram criadas pela UI do Lovable/Supabase antes de as
-migrations passarem a ser versionadas. Só 3 arquivos têm `CREATE TABLE`, e apenas
-para tabelas **novas** (`email_campaigns`, `email_accounts`, `enrichment_jobs`,
-`domain_email_cache`, ...).
+Para criar o banco **do zero** num projeto Supabase novo, rode **[`schema.sql`](schema.sql)**
+(SQL Editor → cole → Run). Ele é a **baseline consolidada**: extensões, ENUMs,
+todas as tabelas na ordem de FK, índices, funções/RPCs e RLS — tudo num arquivo.
 
-Ou seja: estes scripts são **patches incrementais** sobre uma base que vive só no
-banco vivo. Rodar tudo num banco vazio **falha** (ex.: `ALTER TABLE leads ...`
-numa tabela que ainda não existe).
+Foi montado combinando o **schema real das tabelas** (export do banco vivo) com os
+**ENUMs/RLS/funções/índices** destas migrations. Leia o cabeçalho do `schema.sql`:
+tem um bloco "⚠️ REVISAR" com os poucos pontos inferidos (ex.: valores do enum
+`app_role`, que não está em nenhuma migration). Para fidelidade 100% (grants
+finos, triggers de auth), um `pg_dump --schema-only` ainda é o padrão-ouro.
 
-**Para ter um `schema.sql` de verdade (from scratch)**, exporte o schema do banco:
+> **Por que não dá pra montar isso só com as migrations abaixo?** As tabelas-núcleo
+> (`companies`, `profiles`, `leads`, ...) **não são criadas em nenhuma migration** —
+> vieram da base criada pela UI do Lovable. As migrations são **patches
+> incrementais** (`ALTER TABLE ...`); rodar elas num banco vazio falha. Por isso o
+> `schema.sql` foi consolidado a partir do banco vivo. Ver `../TECH_DEBT.md`.
 
-```bash
-# via CLI do Postgres (troque a connection string pela do seu projeto):
-pg_dump --schema-only --no-owner --no-privileges "postgresql://..." > docs/migrations/schema_baseline.sql
-```
+## Histórico incremental (ordem cronológica)
 
-ou no Supabase Dashboard → Database → Schema Visualizer / backup. Ver também o
-item de baseline em `../TECH_DEBT.md`.
-
-## Ordem de aplicação (cronológica)
-
-A base (Lovable) já existe. Sobre ela, aplique nesta ordem:
+As migrations abaixo são o **registro histórico** dos patches aplicados sobre a
+base do Lovable (não use pra setup novo — use o `schema.sql`). Ordem:
 
 | # | Arquivo | O que faz |
 |---|---|---|

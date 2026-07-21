@@ -6,6 +6,13 @@
 **Substitui parcialmente:** [`ADR-001` D5](ADR-001-fontes-de-dados.md) (que previa migração pra Serper pós-PR 6)
 **Anula:** PR 7 do refactor de email enrichment (abstração `LeadDiscoveryProvider` + `SerperDiscoveryProvider`)
 
+> **Emenda (2026-07-21):** entre 2026-07-20 e 2026-07-21, o Serper chegou a ser
+> plugado como fonte de DEV/TESTE (`serper_service.py`, junto com o Scrappa),
+> mas foi **removido em 2026-07-21** — a paginação manual (cap de 20/query) não
+> valia a manutenção, o que reforça a decisão original deste ADR. Fonte de
+> dev/teste mantida: **Scrappa** (`scrappa_service.py`, 500 créditos/mês
+> recorrente). Produção segue **DataForSEO** (inalterado). Ver `TECH_DEBT.md#5`.
+
 ## Contexto
 
 Pós-refactor de email enrichment (PRs 1-6), a próxima etapa planejada era abstrair

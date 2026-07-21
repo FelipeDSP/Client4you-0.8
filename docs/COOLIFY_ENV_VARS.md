@@ -87,17 +87,13 @@ DATAFORSEO_BASE_URL=https://api.dataforseo.com/v3
 > ative `DATAFORSEO_LOGIN`/`PASSWORD` antes de testar. Veja
 > `backend/scripts/smoke_test_dataforseo.py` pra um teste runnable.
 
-### 🔀 **Fonte de descoberta de leads (`LEAD_SOURCE`) + Serper (dev/teste):**
+### 🔀 **Fonte de descoberta de leads (`LEAD_SOURCE`) + Scrappa (dev/teste):**
 
 ```bash
 # Qual provedor usar na descoberta de leads (Google Maps).
 #   dataforseo (default) → fonte canônica de produção (ver ADR-002)
-#   serper               → alternativa de DEV/TESTE (conta DataForSEO travada)
 #   scrappa              → alternativa de DEV/TESTE (tier grátis recorrente)
 LEAD_SOURCE=dataforseo
-
-# Só necessária quando LEAD_SOURCE=serper. Chave da API do Serper.dev.
-SERPER_API_KEY=
 
 # Só necessária quando LEAD_SOURCE=scrappa. Chave em scrappa.co/dashboard.
 SCRAPPA_API_KEY=
@@ -108,16 +104,12 @@ SCRAPPA_API_KEY=
 | `LEAD_SOURCE` | Env extra | Uso | Limite por busca | Grátis |
 |---|---|---|---|---|
 | `dataforseo` (default) | `DATAFORSEO_LOGIN`/`PASSWORD` | Produção | `depth=700` numa chamada | — |
-| `serper` | `SERPER_API_KEY` | Dev/teste | ~20 places/chamada (sem paginação) | 2500 one-time |
 | `scrappa` | `SCRAPPA_API_KEY` | Dev/teste | até 200 results/request | **500/mês recorrente** |
 
-> **Serper e Scrappa são fontes de dev/teste, não de produção.** O ADR-002
-> mantém o DataForSEO como canônico; ambos foram plugados só para desenvolver
-> sem depender da conta DataForSEO (travada por verificação BR).
+> **Scrappa é fonte de dev/teste, não de produção.** O ADR-002 mantém o
+> DataForSEO como canônico; o Scrappa foi plugado só para desenvolver sem
+> depender da conta DataForSEO (travada por verificação BR).
 >
-> - **Serper** (`serper.dev`): 3 créditos/query, ~20 resultados/chamada (sem
->   paginação — ver TODO em `serper_service.py`), 2500 créditos grátis one-time.
->   Teste: `backend/scripts/smoke_test_serper.py`.
 > - **Scrappa** (`scrappa.co`): 1 crédito/request, **até 200 resultados numa
 >   request** (param `limit`), **500 créditos/mês recorrente** grátis — melhor
 >   pra ambiente de teste durável. Teste: `backend/scripts/smoke_test_scrappa.py`.

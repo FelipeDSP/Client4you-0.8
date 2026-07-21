@@ -39,7 +39,7 @@ from scrappa_service import _normalize_item, SCRAPPA_MAPS_URL  # noqa: E402
 
 QUERY = "restaurante"
 LOCATION = "Ariquemes RO"
-LIMIT = 50  # pede mais que os 20 do Serper pra confirmar que o limit é honrado
+LIMIT = 50  # pede um lote maior pra confirmar que o limit é honrado (até 200)
 
 
 async def main() -> int:

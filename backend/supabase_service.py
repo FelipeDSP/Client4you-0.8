@@ -357,7 +357,7 @@ class SupabaseService:
             # alguém aplicar a migration.
             logger.error(
                 f"RPC increment_quota_atomic falhou ({rpc_err}) — usando fallback "
-                f"NÃO-ATÔMICO em {field}. Aplique docs/migration_v14_quota_atomic.sql."
+                f"NÃO-ATÔMICO em {field}. Aplique docs/migrations/migration_v14_quota_atomic.sql."
             )
             try:
                 resp = (

@@ -74,7 +74,7 @@ def _rpc_increment(sb_client, user_id: str, field: str, amount) -> bool:
     except Exception as rpc_err:
         logger.error(
             f"RPC increment_quota_atomic falhou em {field} ({rpc_err}) — fallback "
-            f"NÃO-ATÔMICO. Aplique docs/migration_v14_quota_atomic.sql."
+            f"NÃO-ATÔMICO. Aplique docs/migrations/migration_v14_quota_atomic.sql."
         )
         try:
             resp = (

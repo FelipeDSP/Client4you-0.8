@@ -97,23 +97,21 @@ export function LeadTable({
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm bg-white">
+    <div className="relative w-full overflow-x-auto rounded-xl border border-border shadow-sm bg-white">
       <Table>
-        <TableHeader className="bg-blue-900">
-          <TableRow className="hover:bg-blue-900/90 border-none">
+        <TableHeader className="bg-muted/40">
+          <TableRow className="hover:bg-transparent border-b border-border">
             <TableHead className="w-[40px] pl-4">
               <Checkbox
                 checked={allCurrentPageSelected ? true : someCurrentPageSelected ? "indeterminate" : false}
                 onCheckedChange={toggleSelectAll}
-                className="border-white/50 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground data-[state=indeterminate]:bg-primary/50 data-[state=indeterminate]:border-primary/50"
+                className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground data-[state=indeterminate]:bg-primary/50 data-[state=indeterminate]:border-primary/50"
               />
             </TableHead>
-            <TableHead className="min-w-[200px] font-semibold text-white/90">Empresa</TableHead>
-            <TableHead className="min-w-[140px] font-semibold text-white/90">Telefone</TableHead>
-            <TableHead className="min-w-[180px] font-semibold text-white/90">E-mail</TableHead>
-            <TableHead className="min-w-[140px] font-semibold text-white/90">Site</TableHead>
-            <TableHead className="min-w-[180px] font-semibold text-white/90">Endereço</TableHead>
-            <TableHead className="w-[80px] text-center font-semibold text-white/90">Nota</TableHead>
+            <TableHead className="min-w-[200px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Empresa</TableHead>
+            <TableHead className="min-w-[210px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contato</TableHead>
+            <TableHead className="min-w-[160px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Endereço</TableHead>
+            <TableHead className="w-[80px] text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nota</TableHead>
             <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
@@ -133,59 +131,51 @@ export function LeadTable({
 
               {/* Nome */}
               <TableCell className="py-2">
-                <div className="flex flex-col">
-                  <span className="font-semibold text-slate-800 truncate max-w-[200px]" title={lead.name}>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-slate-800 truncate max-w-[220px]" title={lead.name}>
                     {lead.name}
                   </span>
-                  <span className="text-xs text-slate-400 capitalize truncate max-w-[200px]">
+                  <span className="text-xs text-slate-400 capitalize truncate max-w-[220px]">
                     {lead.category?.toLowerCase() || "Negócio Local"}
                   </span>
                 </div>
               </TableCell>
 
-              {/* Telefone */}
+              {/* Contato (telefone + e-mail + site empilhados) */}
               <TableCell className="py-2">
-                {lead.phone ? (
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-3.5 w-3.5 text-slate-400" />
-                    <span className="font-mono text-slate-600 tracking-tight whitespace-nowrap font-medium">
-                      {lead.phone}
+                <div className="flex flex-col gap-1 min-w-0 max-w-[220px]">
+                  {lead.phone && (
+                    <span className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                      <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="font-mono tracking-tight whitespace-nowrap">{lead.phone}</span>
                     </span>
-                  </div>
-                ) : (
-                  <span className="text-slate-300 text-xs italic">Sem telefone</span>
-                )}
-              </TableCell>
-
-              {/* E-mail */}
-              <TableCell className="py-2">
-                {lead.email ? (
-                  <div className="flex items-center gap-1.5 max-w-[180px]" title={lead.email}>
-                    <Mail className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                    <span className="truncate text-xs text-slate-600 font-medium">{lead.email}</span>
-                  </div>
-                ) : (
-                  <span className="text-slate-300 text-xs pl-1">-</span>
-                )}
-              </TableCell>
-
-              {/* Site */}
-              <TableCell className="py-2">
-                {lead.website ? (
-                  <a
-                    href={lead.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 transition-colors group/link max-w-[140px] hover:underline"
-                  >
-                    <Globe className="h-3.5 w-3.5 shrink-0 opacity-70 group-hover/link:opacity-100" />
-                    <span className="truncate text-xs font-medium">
-                      {formatWebsite(lead.website)}
-                    </span>
-                  </a>
-                ) : (
-                  <span className="text-slate-300 text-xs pl-2">-</span>
-                )}
+                  )}
+                  {lead.email && (
+                    <a
+                      href={`mailto:${lead.email}`}
+                      title={lead.email}
+                      className="flex items-center gap-1.5 text-xs text-slate-600 font-medium hover:text-blue-700 min-w-0"
+                    >
+                      <Mail className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                      <span className="truncate">{lead.email}</span>
+                    </a>
+                  )}
+                  {lead.website && (
+                    <a
+                      href={lead.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={lead.website}
+                      className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline min-w-0"
+                    >
+                      <Globe className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      <span className="truncate">{formatWebsite(lead.website)}</span>
+                    </a>
+                  )}
+                  {!lead.phone && !lead.email && !lead.website && (
+                    <span className="text-slate-300 text-xs italic">Sem contato</span>
+                  )}
+                </div>
               </TableCell>
 
               {/* Endereço */}

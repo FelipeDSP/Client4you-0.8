@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { LeadSearch } from "@/components/LeadSearch";
+import { LeadRegionMap } from "@/components/LeadRegionMap";
+import { LeadStats } from "@/components/LeadStats";
 import { LeadFilters, LeadFilterState, defaultFilters, filterLeads } from "@/components/LeadFilters";
 import { LeadTable } from "@/components/LeadTable";
 import { Card } from "@/components/ui/card";
@@ -10,7 +12,7 @@ import { useLeads, QuotaExhaustedError } from "@/hooks/useLeads";
 import { useQuotas } from "@/hooks/useQuotas";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { Lead } from "@/types";
-import { Search, ArrowDown, Loader2, Mail, ChevronLeft, ChevronRight, Database, Sparkles } from "lucide-react";
+import { Search, Loader2, Mail, ChevronLeft, ChevronRight, Database, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +26,7 @@ export default function SearchLeads() {
   }, [setPageTitle]);
 
   const [currentResults, setCurrentResults] = useState<Lead[]>([]);
+  const [searchedLocation, setSearchedLocation] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isEnrichingPage, setIsEnrichingPage] = useState(false);
@@ -184,6 +187,7 @@ export default function SearchLeads() {
     }
 
     setCurrentResults([]);
+    setSearchedLocation(location);
     setHasSearched(true);
     setIsProcessing(true);
     setCurrentPage(1);
@@ -300,116 +304,125 @@ export default function SearchLeads() {
       {/* Barra de progresso do batch async — visível durante enrichment/reenrichment */}
       {enrichmentProgress && <EnrichmentProgress progress={enrichmentProgress} />}
 
-      <Card className="p-6 bg-white shadow-sm border-none rounded-xl">
-        <div className="space-y-6">
-          <LeadSearch
-            onSearch={handleSearch}
-            isSearching={isBusy}
-          />
+      {/* Filtros de busca */}
+      <LeadSearch onSearch={handleSearch} isSearching={isBusy} />
 
-          {hasSearched && currentResults.length > 0 && (
-            <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-              <LeadFilters
-                leads={currentResults}
-                filters={filters}
-                onFiltersChange={setFilters}
-              />
-            </div>
-          )}
-        </div>
-      </Card>
-
+      {/* Resultados (esquerda) + Mapa e dados (rail direito) */}
       {hasSearched && (currentResults.length > 0 || isBusy) && (
-        <Card className="p-6 bg-white shadow-sm border-none rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* ── Coluna esquerda: resultados ── */}
+          <Card className="p-5 bg-white shadow-sm border-none rounded-xl min-w-0">
+            {/* Header: contagem + status + paginação topo */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold text-lg">
+                  {filteredLeads.length > 0
+                    ? `${filteredLeads.length} Lead${filteredLeads.length !== 1 ? "s" : ""}`
+                    : isBusy ? "Carregando..." : "Nenhum lead encontrado"}
+                </h3>
 
-          {/* Header */}
-          <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <ArrowDown className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold text-lg">
-                {filteredLeads.length > 0
-                  ? `${filteredLeads.length} Lead${filteredLeads.length !== 1 ? "s" : ""}`
-                  : isBusy ? "Carregando..." : "Nenhum lead encontrado"}
-              </h3>
+                {isProcessing && (
+                  <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full animate-pulse border border-orange-100">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {fetchStatus}
+                  </span>
+                )}
 
-              {isProcessing && (
-                <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full animate-pulse border border-orange-100">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {fetchStatus}
-                </span>
-              )}
+                {!isProcessing && isEnrichingPage && (
+                  <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full animate-pulse border border-blue-100">
+                    <Mail className="h-3 w-3" />
+                    {fetchStatus || "Extraindo e-mails..."}
+                  </span>
+                )}
+              </div>
 
-              {!isProcessing && isEnrichingPage && (
-                <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full animate-pulse border border-blue-100">
-                  <Mail className="h-3 w-3" />
-                  {fetchStatus || "Extraindo e-mails..."}
-                </span>
+              {/* Paginação topo */}
+              {filteredLeads.length > LEADS_PER_PAGE && (
+                <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 self-start md:self-auto">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                    className="h-8 w-8 p-0 hover:bg-white hover:shadow-sm"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="px-3 text-sm font-medium text-slate-600 border-x border-slate-200 h-6 flex items-center bg-white shadow-sm rounded-sm">
+                    {safePage} / {totalPages}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                    className="h-8 w-8 p-0 hover:bg-white hover:shadow-sm"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
             </div>
 
-            {/* Paginação topo */}
-            {filteredLeads.length > LEADS_PER_PAGE && (
-              <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className="h-8 w-8 p-0 hover:bg-white hover:shadow-sm"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="px-3 text-sm font-medium text-slate-600 border-x border-slate-200 h-6 flex items-center bg-white shadow-sm rounded-sm">
-                  {safePage} / {totalPages}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className="h-8 w-8 p-0 hover:bg-white hover:shadow-sm"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+            {/* Filtros de resultado (nome + avançados) */}
+            {currentResults.length > 0 && (
+              <div className="mb-4">
+                <LeadFilters
+                  leads={currentResults}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                />
               </div>
             )}
-          </div>
 
-          <LeadTable
-            leads={paginatedLeads}
-            selectedLeads={selectedLeads}
-            onSelectionChange={setSelectedLeads}
-            onDelete={handleLocalDelete}
-            isLoading={isProcessing && currentResults.length === 0}
-          />
+            <LeadTable
+              leads={paginatedLeads}
+              selectedLeads={selectedLeads}
+              onSelectionChange={setSelectedLeads}
+              onDelete={handleLocalDelete}
+              isLoading={isProcessing && currentResults.length === 0}
+            />
 
-          {/* Paginação rodapé */}
-          {filteredLeads.length > LEADS_PER_PAGE && (
-            <div className="mt-6 pt-4 border-t flex justify-center">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 100, behavior: 'smooth' }); }}
-                  disabled={safePage === 1}
-                  className="gap-2"
-                >
-                  <ChevronLeft className="h-4 w-4" /> Anterior
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Página {safePage} de {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 100, behavior: 'smooth' }); }}
-                  disabled={safePage === totalPages}
-                  className="gap-2"
-                >
-                  Próxima <ChevronRight className="h-4 w-4" />
-                </Button>
+            {/* Paginação rodapé */}
+            {filteredLeads.length > LEADS_PER_PAGE && (
+              <div className="mt-6 pt-4 border-t flex justify-center">
+                <div className="flex items-center gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 100, behavior: 'smooth' }); }}
+                    disabled={safePage === 1}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {safePage} de {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 100, behavior: 'smooth' }); }}
+                    disabled={safePage === totalPages}
+                    className="gap-2"
+                  >
+                    Próxima <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </Card>
+            )}
+          </Card>
+
+          {/* ── Coluna direita: mapa + dados (sticky) ── */}
+          <div className="space-y-6 lg:sticky lg:top-6">
+            {searchedLocation && (
+              <LeadRegionMap
+                location={searchedLocation}
+                leads={currentResults}
+                count={currentResults.length}
+              />
+            )}
+            {currentResults.length > 0 && <LeadStats leads={currentResults} />}
+          </div>
+        </div>
       )}
 
       {hasSearched && !isBusy && currentResults.length === 0 && (

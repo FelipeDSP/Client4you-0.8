@@ -86,7 +86,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
           {/* Área Principal com Padding Confortável */}
           <div className="flex-1 overflow-auto p-6 md:p-8">
-            <div className="mx-auto max-w-6xl">
+            <div className="mx-auto max-w-7xl">
               {children}
             </div>
           </div>

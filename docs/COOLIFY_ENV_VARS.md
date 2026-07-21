@@ -142,16 +142,26 @@ EMAIL_CACHE_TTL_DAYS=30
 ### ✅ **OBRIGATÓRIAS:**
 
 ```bash
-# URL do Backend
-VITE_BACKEND_URL=https://seu-dominio-backend.com/api
+# URL do Backend — SÓ o domínio, SEM /api no fim.
+# O código já adiciona /api nas chamadas (ex: `${VITE_BACKEND_URL}/api/leads/search`).
+# Se puser /api aqui, vira /api/api/... = 404.
+VITE_BACKEND_URL=https://api.seu-dominio.com
+
+# Supabase (frontend usa a anon/publishable key, NÃO a service_role).
+VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sua-anon-publishable-key
 
 # Feature flag: módulo de Campanhas de Email (manter sincronizado com
 # ENABLE_CAMPAIGNS do backend). Vite resolve no BUILD, não em runtime —
 # mudou? rebuild + redeploy. Default "false".
 VITE_ENABLE_CAMPAIGNS=false
+
+# Cloudflare Turnstile (captcha do login) — site key pública.
+VITE_TURNSTILE_SITE_KEY=sua-site-key-turnstile
 ```
 
 **IMPORTANTE:** No Coolify, o frontend React usa `VITE_` prefix, não `REACT_APP_`.
+As `VITE_*` são resolvidas no **BUILD** — mudou alguma? **rebuild**, não só restart.
 
 ---
 
@@ -204,9 +214,10 @@ VITE_ENABLE_CAMPAIGNS=false
 - Pode incluir múltiplos separados por vírgula: `https://app.com,https://www.app.com`
 
 ### **VITE_BACKEND_URL:**
-- Deve apontar para o domínio do backend + `/api`
-- Exemplo: `https://api.seudominio.com/api`
-- **NÃO** incluir barra no final
+- Aponta para o **domínio do backend, SEM `/api`** e sem barra no final.
+- Exemplo correto: `https://api.seudominio.com`
+- O código adiciona `/api` sozinho. Se você incluir `/api`, vira
+  `https://api.seudominio.com/api/api/...` = **404**.
 
 ### **Banco de Dados:**
 - O Supabase já gerencia PostgreSQL

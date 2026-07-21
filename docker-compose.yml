@@ -16,6 +16,9 @@ services:
       # Firecrawl (enrichment de e-mail)
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
       - EMAIL_CACHE_TTL_DAYS=${EMAIL_CACHE_TTL_DAYS:-30}
+      # Fonte de descoberta de leads: dataforseo (default) | scrappa (ver lead_source.py)
+      - LEAD_SOURCE=${LEAD_SOURCE:-dataforseo}
+      - SCRAPPA_API_KEY=${SCRAPPA_API_KEY}
       # DataForSEO (descoberta de leads — Google Maps)
       - DATAFORSEO_LOGIN=${DATAFORSEO_LOGIN}
       - DATAFORSEO_PASSWORD=${DATAFORSEO_PASSWORD}

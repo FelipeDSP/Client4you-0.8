@@ -676,6 +676,16 @@ CREATE POLICY "enrichment_jobs_select_company_scoped" ON public.enrichment_jobs
     FOR SELECT TO authenticated
     USING (company_id = public.user_company_id() OR public.is_super_admin());
 
+-- =============================================================================
+-- 6 — VIEWS
+-- =============================================================================
+-- Contagem de membros por empresa (usada em backend/routes/admin.py).
+CREATE OR REPLACE VIEW public.company_member_counts AS
+    SELECT company_id, count(*) AS total_members
+    FROM public.profiles
+    GROUP BY company_id;
+GRANT SELECT ON public.company_member_counts TO authenticated, service_role;
+
 COMMIT;
 
 -- =============================================================================

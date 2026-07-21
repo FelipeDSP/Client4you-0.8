@@ -29,8 +29,7 @@ base do Lovable (não use pra setup novo — use o `schema.sql`). Ordem:
 
 | # | Arquivo | O que faz |
 |---|---|---|
-| 1 | `migration_clean_v1.sql` | Reset cirúrgico: ENUMs, RLS por tabela, consolidação de `agent_*`, `subscriptions` como fonte do plano. **(Monolítico.)** |
-| — | `migration_clean_v1_part1..5_*.sql` | **Mesma coisa do v1, fatiada em 5 partes** (forma alternativa de aplicar, mais leve por passo). Use OU o monolítico OU as 5 partes — não os dois. |
+| 1 | `migration_clean_v1.sql` | Reset cirúrgico: ENUMs, RLS por tabela, consolidação de `agent_*`, `subscriptions` como fonte do plano. |
 | 2 | `migration_clean_v2_remove_agente.sql` | Remove o feature Agente IA (`agent_configs`) e o plano `avancado`. |
 | 3 | `migration_clean_v3_remove_whatsapp.sql` | Remove WhatsApp/Disparador (campaigns, message_logs, colunas WAHA). |
 | 4 | `migration_v4_email_campaigns.sql` | Tabelas de campanhas de **e-mail** (feature novo, distinto do WhatsApp). |
@@ -47,12 +46,10 @@ base do Lovable (não use pra setup novo — use o `schema.sql`). Ordem:
 | 15 | `migration_v14_quota_atomic.sql` | RPC `increment_quota_atomic` (incremento atômico de quota). |
 | 16 | `migration_v15_leads_latlng.sql` | Colunas `latitude`/`longitude` em leads (mini-mapa por lead). |
 
-## Scripts operacionais (não são schema de tabela)
+## Limpeza (2026-07-21)
 
-- `supabase_cron_jobs.sql` — jobs `pg_cron` da era WhatsApp (limpeza de
-  `message_logs`). **Provavelmente obsoleto** — o `clean_v3` desagenda esses jobs
-  e dropa as tabelas. Revisar antes de reaplicar.
-- `supabase_optimization.sql` — views e índices de performance (ex.:
-  `company_member_counts`). Parte pode referenciar tabelas já removidas — revisar.
-- `migration_settings_expansion.sql` — campos de Disparador/Remarketing em
-  `company_settings`. **Obsoleto**: o `clean_v3` remove essas colunas.
+Removidos por obsolescência (o `schema.sql` já cobre o estado atual):
+`migration_clean_v1_part1..5` (duplicatas do monolítico), `settings_expansion`
+(colunas removidas pelo clean_v3), `supabase_cron_jobs` (limpava `message_logs`,
+tabela dropada) e `supabase_optimization` (usava tabelas dropadas — só a view
+`company_member_counts`, ainda usada pelo admin, foi preservada no `schema.sql`).

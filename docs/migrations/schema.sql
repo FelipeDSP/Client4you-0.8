@@ -13,14 +13,12 @@
 --   Requer um projeto Supabase (usa o schema `auth` e `auth.users`).
 --
 -- ⚠️ REVISAR ANTES DE PRODUÇÃO (itens que a fonte não deixou 100% explícitos):
---   1. ENUM `app_role`: NÃO existe em nenhuma migration (veio da base criada
---      pela UI do Lovable). Os valores abaixo são INFERIDOS do uso no código
---      (is_super_admin/is_company_owner + tipos do frontend). Confira no banco:
---        SELECT unnest(enum_range(NULL::app_role));
---   2. `user_2fa.backup_codes`: o export mostrou só "ARRAY". Assumido `text[]`.
---   3. Para fidelidade 100% (defaults exóticos, grants finos, triggers de
+--   1. `user_2fa.backup_codes`: o export mostrou só "ARRAY". Assumido `text[]`.
+--   2. Para fidelidade 100% (defaults exóticos, grants finos, triggers de
 --      auth), o ideal continua sendo um `pg_dump --schema-only`. Este arquivo
 --      é uma baseline sólida — teste num projeto descartável antes de confiar.
+--
+--   (O enum `app_role` foi VERIFICADO no banco vivo — ver seção 1.)
 -- =============================================================================
 
 BEGIN;
@@ -35,9 +33,10 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
 -- =============================================================================
 DO $$
 BEGIN
-    -- ⚠️ INFERIDO (não está em migration). Ajuste se o banco divergir.
+    -- VERIFICADO no banco vivo (enum_range, 2026-07-21). Não está em migration
+    -- (veio da base do Lovable). Ordem preservada.
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
-        CREATE TYPE app_role AS ENUM ('super_admin', 'company_owner', 'member', 'user');
+        CREATE TYPE app_role AS ENUM ('super_admin', 'company_owner', 'admin', 'member');
     END IF;
 
     -- plan_id_enum: 'avancado' foi removido na migration clean_v2.

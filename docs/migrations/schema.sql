@@ -216,6 +216,10 @@ CREATE TABLE IF NOT EXISTS public.user_quotas (
     firecrawl_credits_spent_estimated numeric NOT NULL DEFAULT 0,
     cache_hits_count integer NOT NULL DEFAULT 0,
     reenrich_used integer NOT NULL DEFAULT 0,
+    -- Overrides por usuário (admin). NULL = usa PLAN_LIMITS. -1 = ilimitado. (v18)
+    leads_limit_override integer,
+    campaigns_limit_override integer,
+    messages_limit_override integer,
     CONSTRAINT user_quotas_pkey PRIMARY KEY (id),
     CONSTRAINT user_quotas_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
     CONSTRAINT user_quotas_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)
@@ -591,6 +595,41 @@ BEGIN
     RETURN QUERY SELECT d_leads, d_hist;
 END;
 $$;
+
+-- 4.4 — Signup: cria empresa + perfil + role + subscription demo + quota.
+-- (Ver migration_v17: a quota é criada AQUI, com company_id — o trigger antigo
+-- handle_new_user_quota foi removido por inserir colunas que não existem mais.)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  new_company_id UUID;
+BEGIN
+  INSERT INTO public.companies (name, slug)
+  VALUES (COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)), NEW.id::text)
+  RETURNING id INTO new_company_id;
+
+  INSERT INTO public.profiles (id, email, full_name, company_id)
+  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)), new_company_id);
+
+  INSERT INTO public.user_roles (user_id, role, company_id)
+  VALUES (NEW.id, 'company_owner', new_company_id);
+
+  INSERT INTO public.subscriptions (company_id, plan_id, status)
+  VALUES (new_company_id, 'demo', 'active');
+
+  INSERT INTO public.user_quotas (user_id, company_id)
+  VALUES (NEW.id, new_company_id)
+  ON CONFLICT (user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- =============================================================================
 -- 5 — ROW LEVEL SECURITY

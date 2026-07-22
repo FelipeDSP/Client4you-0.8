@@ -46,6 +46,8 @@ base do Lovable (não use pra setup novo — use o `schema.sql`). Ordem:
 | 15 | `migration_v14_quota_atomic.sql` | RPC `increment_quota_atomic` (incremento atômico de quota). |
 | 16 | `migration_v15_leads_latlng.sql` | Colunas `latitude`/`longitude` em leads (mini-mapa por lead). |
 | 17 | `migration_v16_segments_tags.sql` | Segmentos (pastas) + etiquetas (tags) da Base de Leads: `lead_segments`, `tags`, junções N:N (`lead_segment_members`, `lead_tags`, `segment_tags`) + RLS company-scoped. |
+| 18 | `migration_v17_fix_signup_quota_trigger.sql` | **Fix crítico**: trigger `handle_new_user_quota` inseria colunas mortas (`plan_type`/`plan_name`/`plan_expires_at`) em `user_quotas` → todo cadastro novo dava "Database error creating new user". Quota passa a nascer dentro de `handle_new_user`; trigger/função obsoletos removidos. |
+| 19 | `migration_v18_quota_overrides.sql` | Overrides de limite POR usuário em `user_quotas` (`leads_limit_override`, `campaigns_limit_override`, `messages_limit_override`). NULL = usa PLAN_LIMITS; -1 = ilimitado. Faz o painel admin realmente aplicar os limites digitados. |
 
 ## Limpeza (2026-07-21)
 

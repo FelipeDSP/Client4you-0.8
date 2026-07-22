@@ -546,6 +546,15 @@ async def update_user_quota(
             'updated_at': now.isoformat(),
         }, on_conflict='company_id').execute()
 
+        # Overrides por usuário (v18): os limites digitados no painel viram
+        # override (NULL = usa PLAN_LIMITS; -1 = ilimitado). É o que faz o admin
+        # conseguir, por ex., deixar a busca de leads ilimitada pra um usuário.
+        overrides = {
+            'leads_limit_override': quota_data.leads_limit,
+            'campaigns_limit_override': quota_data.campaigns_limit,
+            'messages_limit_override': quota_data.messages_limit,
+        }
+
         # Garante user_quotas: insere zerado SÓ se não existir (preserva contadores)
         existing_q = db.client.table('user_quotas')\
             .select('id')\
@@ -560,10 +569,11 @@ async def update_user_quota(
                 'campaigns_used': 0,
                 'messages_sent': 0,
                 'updated_at': now.isoformat(),
+                **overrides,
             }).execute()
         else:
             result = db.client.table('user_quotas')\
-                .update({'company_id': company_id, 'updated_at': now.isoformat()})\
+                .update({'company_id': company_id, 'updated_at': now.isoformat(), **overrides})\
                 .eq('user_id', user_id)\
                 .execute()
 

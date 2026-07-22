@@ -203,13 +203,21 @@ class SupabaseService:
 
         limits = get_plan_limits(plan_id, status)
 
+        # Overrides por usuário (admin): quando != None, vencem o limite do plano.
+        # Só valem com subscription ativa — suspensa/expirada continua zerada.
+        is_active = status not in ('suspended', 'cancelled', 'expired')
+
+        def _eff(override_key: str, plan_key: str):
+            ov = quota.get(override_key)
+            return ov if (is_active and ov is not None) else limits[plan_key]
+
         return {
             **quota,
             'plan_type': plan_id,
             'plan_name': limits['name'],
-            'leads_limit': limits['leads_limit'],
-            'campaigns_limit': limits['campaigns_limit'],
-            'messages_limit': limits['messages_limit'],
+            'leads_limit': _eff('leads_limit_override', 'leads_limit'),
+            'campaigns_limit': _eff('campaigns_limit_override', 'campaigns_limit'),
+            'messages_limit': _eff('messages_limit_override', 'messages_limit'),
             # PR 6: limites de enrichment (vêm de PLAN_LIMITS, contadores em user_quotas)
             'email_enrichment_limit': limits.get('email_enrichment_limit', 0),
             'reenrich_limit': limits.get('reenrich_limit', 0),

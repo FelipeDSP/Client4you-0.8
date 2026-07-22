@@ -45,6 +45,7 @@ base do Lovable (não use pra setup novo — use o `schema.sql`). Ordem:
 | 14 | `migration_v13_reenrich_quota.sql` | Sub-quota de reenriquecimento. |
 | 15 | `migration_v14_quota_atomic.sql` | RPC `increment_quota_atomic` (incremento atômico de quota). |
 | 16 | `migration_v15_leads_latlng.sql` | Colunas `latitude`/`longitude` em leads (mini-mapa por lead). |
+| 17 | `migration_v16_segments_tags.sql` | Segmentos (pastas) + etiquetas (tags) da Base de Leads: `lead_segments`, `tags`, junções N:N (`lead_segment_members`, `lead_tags`, `segment_tags`) + RLS company-scoped. |
 
 ## Limpeza (2026-07-21)
 

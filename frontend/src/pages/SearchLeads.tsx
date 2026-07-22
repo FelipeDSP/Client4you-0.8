@@ -61,9 +61,12 @@ export default function SearchLeads() {
     if (selectedLeads.length === 0) return;
     try {
       const result = await saveLeadsToBase(selectedLeads);
+      const skippedMsg = result.skipped > 0
+        ? ` ${result.skipped} já estava(m) na base (ignorado(s)).`
+        : "";
       toast({
-        title: "Adicionados à Base de Leads",
-        description: `${result.saved} lead(s) salvos. Vá em Base de Leads para visualizar.`,
+        title: result.saved > 0 ? "Adicionados à Base de Leads" : "Nada novo para salvar",
+        description: `${result.saved} lead(s) salvos.${skippedMsg} Vá em Base de Leads para visualizar.`,
         className: "border-l-4 border-green-500",
       });
       setSelectedLeads([]);

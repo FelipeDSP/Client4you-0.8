@@ -380,18 +380,59 @@ export function useLeads() {
   });
 
   // --- 6. MUTATION: Salvar leads na Base de Leads ---
+  // Dedup por nome+endereço: uma nova busca cria novas linhas (search_id novo),
+  // então a mesma empresa pode reaparecer. Aqui só salvamos as que ainda NÃO
+  // estão na Base — evita duplicar quando o usuário salva de buscas diferentes.
   const saveLeadsToBaseMutation = useMutation({
     mutationFn: async (leadIds: string[]) => {
-      if (!user?.companyId || leadIds.length === 0) return { saved: 0 };
-      const nowIso = new Date().toISOString();
-      const { error } = await supabase
+      if (!user?.companyId || leadIds.length === 0) return { saved: 0, skipped: 0 };
+      const companyId = user.companyId;
+
+      // Chave de identidade: nome + endereço, normalizados
+      const keyOf = (name?: string | null, address?: string | null) =>
+        `${(name || "").trim().toLowerCase()}|${(address || "").trim().toLowerCase()}`;
+
+      // 1) Empresas que já estão na Base (leads salvos)
+      const { data: baseRows, error: baseErr } = await supabase
         .from("leads")
-        .update({ saved_at: nowIso } as any)
+        .select("name, address")
+        .eq("company_id", companyId)
+        .not("saved_at", "is", null);
+      if (baseErr) throw baseErr;
+      const seen = new Set((baseRows || []).map((r: any) => keyOf(r.name, r.address)));
+
+      // 2) Dados dos candidatos selecionados (só os transitórios ainda não salvos)
+      const { data: candidates, error: candErr } = await supabase
+        .from("leads")
+        .select("id, name, address")
         .in("id", leadIds)
-        .eq("company_id", user.companyId)
+        .eq("company_id", companyId)
         .is("saved_at", null);
-      if (error) throw error;
-      return { saved: leadIds.length };
+      if (candErr) throw candErr;
+
+      // 3) Filtra: pula os que já estão na Base (ou repetidos no próprio lote)
+      const toSave: string[] = [];
+      for (const c of (candidates || []) as any[]) {
+        const k = keyOf(c.name, c.address);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        toSave.push(c.id);
+      }
+      const skipped = leadIds.length - toSave.length;
+
+      // 4) Salva só os novos
+      if (toSave.length > 0) {
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
+          .from("leads")
+          .update({ saved_at: nowIso } as any)
+          .in("id", toSave)
+          .eq("company_id", companyId)
+          .is("saved_at", null);
+        if (error) throw error;
+      }
+
+      return { saved: toSave.length, skipped };
     },
     onSuccess: () => {
       // Invalida a Base — refetch traz os recém-salvos

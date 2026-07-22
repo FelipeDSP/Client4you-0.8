@@ -25,6 +25,8 @@ interface LeadTableProps {
   selectedLeads?: string[];
   onSelectionChange?: (ids: string[]) => void;
   isLoading?: boolean;
+  /** Opcional: renderiza chips (etiquetas/segmentos) abaixo do nome do lead. */
+  renderTags?: (leadId: string) => React.ReactNode;
 }
 
 const formatWebsite = (url: string) => {
@@ -42,6 +44,7 @@ export function LeadTable({
   selectedLeads = [],
   onSelectionChange,
   isLoading,
+  renderTags,
 }: LeadTableProps) {
 
   const currentPageIds = leads.map(l => l.id);
@@ -138,6 +141,11 @@ export function LeadTable({
                   <span className="text-xs text-slate-400 capitalize truncate max-w-[220px]">
                     {lead.category?.toLowerCase() || "Negócio Local"}
                   </span>
+                  {renderTags && (
+                    <div className="flex flex-wrap gap-1 mt-1 max-w-[240px]">
+                      {renderTags(lead.id)}
+                    </div>
+                  )}
                 </div>
               </TableCell>
 

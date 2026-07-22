@@ -11,6 +11,10 @@ import {
   Trash2,
   Loader2,
   Plus,
+  FolderInput,
+  Tags as TagsIcon,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { LeadFilters, defaultFilters, filterLeads, LeadFilterState } from "@/components/LeadFilters";
 import { LeadTable } from "@/components/LeadTable";
@@ -20,6 +24,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,16 +52,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLeads } from "@/hooks/useLeads";
+import { useSegmentsAndTags, type Segment } from "@/hooks/useSegmentsAndTags";
+import { SegmentsSidebar } from "@/components/leads/SegmentsSidebar";
+import { SegmentDialog } from "@/components/leads/SegmentDialog";
+import { ManageTagsDialog } from "@/components/leads/ManageTagsDialog";
+import { TagPill } from "@/components/leads/TagPill";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { useToast } from "@/hooks/use-toast";
 
 const LEADS_PER_PAGE = 25;
 
 /**
- * Base de Leads — visualiza TODOS os leads acumulados no banco
- * (acumulados pelas buscas via /search). Diferente de /search que
- * mostra o resultado da busca atual, esta página é a "fonte da verdade"
- * permanente da base.
+ * Base de Leads — visualiza TODOS os leads salvos, organizados em segmentos
+ * (pastas) e etiquetas. A busca transitória fica em /search.
  */
 export default function LeadsDatabase() {
   const { setPageTitle } = usePageTitle();
@@ -59,6 +74,23 @@ export default function LeadsDatabase() {
   }, [setPageTitle]);
 
   const { leads, isLoading, deleteLead, clearAllLeads, addManualLead, isAddingManualLead } = useLeads();
+  const {
+    segments,
+    tags,
+    leadSegments,
+    leadTags,
+    createSegment,
+    updateSegment,
+    deleteSegment,
+    createTag,
+    updateTag,
+    deleteTag,
+    addLeadsToSegment,
+    removeLeadsFromSegment,
+    addTagToLeads,
+    removeTagFromLeads,
+    setSegmentTag,
+  } = useSegmentsAndTags();
   const { toast } = useToast();
 
   const [filters, setFilters] = useState<LeadFilterState>(defaultFilters);
@@ -66,6 +98,14 @@ export default function LeadsDatabase() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
+
+  // Organização
+  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [showSegmentDialog, setShowSegmentDialog] = useState(false);
+  const [editingSegment, setEditingSegment] = useState<Segment | null>(null);
+  const [showTagsDialog, setShowTagsDialog] = useState(false);
+
   const [newLead, setNewLead] = useState({
     name: "",
     email: "",
@@ -75,6 +115,8 @@ export default function LeadsDatabase() {
     website: "",
     hasWhatsApp: false,
   });
+
+  const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
 
   const resetNewLead = () =>
     setNewLead({ name: "", email: "", phone: "", category: "", address: "", website: "", hasWhatsApp: false });
@@ -90,37 +132,38 @@ export default function LeadsDatabase() {
       setShowAddDialog(false);
       resetNewLead();
     } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao adicionar",
-        description: (e as Error).message || "Tente de novo.",
-      });
+      toast({ variant: "destructive", title: "Erro ao adicionar", description: (e as Error).message || "Tente de novo." });
     }
   };
 
-  // Filter combinado: search + filters
+  // Filter combinado: segmento + etiquetas + search + filters
   const filtered = useMemo(() => {
     let result = leads;
+
+    if (activeSegmentId) {
+      result = result.filter((l) => (leadSegments[l.id] || []).includes(activeSegmentId));
+    }
+    if (selectedTagIds.length > 0) {
+      result = result.filter((l) => {
+        const lt = leadTags[l.id] || [];
+        return selectedTagIds.some((t) => lt.includes(t)); // tem ao menos uma
+      });
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       result = result.filter((l) =>
         [l.name, l.email, l.phone, l.category, l.address]
           .filter(Boolean)
-          .some((field) => String(field).toLowerCase().includes(q))
+          .some((field) => String(field).toLowerCase().includes(q)),
       );
     }
     return filterLeads(result, filters);
-  }, [leads, search, filters]);
+  }, [leads, activeSegmentId, selectedTagIds, leadSegments, leadTags, search, filters]);
 
-  // Paginação
   const totalPages = Math.max(1, Math.ceil(filtered.length / LEADS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
-  const paginated = filtered.slice(
-    (safePage - 1) * LEADS_PER_PAGE,
-    safePage * LEADS_PER_PAGE
-  );
+  const paginated = filtered.slice((safePage - 1) * LEADS_PER_PAGE, safePage * LEADS_PER_PAGE);
 
-  // Stats globais (base inteira, não filtrada)
   const stats = useMemo(
     () => ({
       total: leads.length,
@@ -128,13 +171,12 @@ export default function LeadsDatabase() {
       withWhatsApp: leads.filter((l) => l.hasWhatsApp).length,
       withWebsite: leads.filter((l) => l.website).length,
     }),
-    [leads]
+    [leads],
   );
 
-  // Reset pra página 1 quando filtros ou busca mudam
   useEffect(() => {
     setPage(1);
-  }, [filters, search]);
+  }, [filters, search, activeSegmentId, selectedTagIds]);
 
   const handleDelete = async (id: string) => {
     await deleteLead(id);
@@ -146,6 +188,90 @@ export default function LeadsDatabase() {
     setSelected([]);
   };
 
+  // ── Organização: handlers ────────────────────────────────────────────────
+  const toggleTagFilter = (id: string) =>
+    setSelectedTagIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+
+  const handleSaveSegment = async (data: { name: string; color: string; description: string; tagIds: string[] }) => {
+    let segId = editingSegment?.id;
+    const before = new Set(editingSegment?.tagIds || []);
+    try {
+      if (editingSegment) {
+        await updateSegment({ id: editingSegment.id, name: data.name, color: data.color, description: data.description });
+      } else {
+        const created: any = await createSegment({ name: data.name, color: data.color, description: data.description });
+        segId = created?.id;
+      }
+      // reconcilia etiquetas do segmento
+      const after = new Set(data.tagIds);
+      const ops: Promise<any>[] = [];
+      if (segId) {
+        for (const t of data.tagIds) if (!before.has(t)) ops.push(setSegmentTag({ segmentId: segId, tagId: t, on: true }));
+        for (const t of before) if (!after.has(t)) ops.push(setSegmentTag({ segmentId: segId, tagId: t, on: false }));
+      }
+      await Promise.all(ops);
+      toast({ title: editingSegment ? "Segmento atualizado" : "Segmento criado" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro no segmento", description: (e as Error).message });
+      throw e;
+    }
+  };
+
+  const handleAddToSegment = async (segmentId: string) => {
+    if (selected.length === 0) return;
+    try {
+      await addLeadsToSegment({ segmentId, leadIds: selected });
+      const seg = segments.find((s) => s.id === segmentId);
+      toast({ title: "Adicionado ao segmento", description: `${selected.length} lead(s) em "${seg?.name}".` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: (e as Error).message });
+    }
+  };
+
+  const handleRemoveFromSegment = async () => {
+    if (!activeSegmentId || selected.length === 0) return;
+    try {
+      await removeLeadsFromSegment({ segmentId: activeSegmentId, leadIds: selected });
+      toast({ title: "Removido do segmento", description: `${selected.length} lead(s) fora da pasta.` });
+      setSelected([]);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: (e as Error).message });
+    }
+  };
+
+  const handleApplyTag = async (tagId: string) => {
+    if (selected.length === 0) return;
+    try {
+      await addTagToLeads({ tagId, leadIds: selected });
+      const t = tagById.get(tagId);
+      toast({ title: "Etiqueta aplicada", description: `"${t?.name}" em ${selected.length} lead(s).` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: (e as Error).message });
+    }
+  };
+
+  const handleRemoveTagFromLead = async (tagId: string, leadId: string) => {
+    try {
+      await removeTagFromLeads({ tagId, leadIds: [leadId] });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: (e as Error).message });
+    }
+  };
+
+  // Chips de etiqueta por lead (na tabela)
+  const renderLeadTags = (leadId: string) => {
+    const ids = leadTags[leadId] || [];
+    if (ids.length === 0) return null;
+    return ids.map((tid) => {
+      const t = tagById.get(tid);
+      return t ? (
+        <TagPill key={tid} name={t.name} color={t.color} onRemove={() => handleRemoveTagFromLead(tid, leadId)} />
+      ) : null;
+    });
+  };
+
+  const activeSegment = segments.find((s) => s.id === activeSegmentId) || null;
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       {/* Header */}
@@ -153,7 +279,7 @@ export default function LeadsDatabase() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900">Base de Leads</h2>
           <p className="text-muted-foreground mt-1">
-            Toda sua base de leads acumulada. Use a busca rápida ou os filtros pra encontrar.
+            Organize seus leads em segmentos (pastas) e etiquetas. Um lead pode estar em vários segmentos.
           </p>
         </div>
 
@@ -175,16 +301,13 @@ export default function LeadsDatabase() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Apagar TODOS os leads?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Esta ação é permanente. Vai apagar {leads.length} leads e não pode ser desfeita.
-                    Considere exportar antes.
+                    Esta ação é permanente. Vai apagar {leads.length} leads e não pode ser desfeita. Considere exportar
+                    antes.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleClearAll}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
+                  <AlertDialogAction onClick={handleClearAll} className="bg-red-600 hover:bg-red-700">
                     Apagar tudo
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -202,88 +325,234 @@ export default function LeadsDatabase() {
         <StatCard icon={Globe} label="Com site" value={stats.withWebsite} color="purple" />
       </div>
 
-      {/* Search + actions */}
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <div className="relative max-w-md flex-1">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome, email, telefone, categoria..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+      {/* Layout: sidebar de segmentos + conteúdo */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar */}
+        <aside className="lg:w-60 lg:shrink-0">
+          <Card>
+            <CardContent className="p-3">
+              <SegmentsSidebar
+                segments={segments}
+                tags={tags}
+                leadsTotal={leads.length}
+                activeSegmentId={activeSegmentId}
+                onSelect={setActiveSegmentId}
+                onNewSegment={() => {
+                  setEditingSegment(null);
+                  setShowSegmentDialog(true);
+                }}
+                onEditSegment={(seg) => {
+                  setEditingSegment(seg);
+                  setShowSegmentDialog(true);
+                }}
+                onDeleteSegment={(id) => deleteSegment(id)}
+                onManageTags={() => setShowTagsDialog(true)}
               />
-            </div>
+            </CardContent>
+          </Card>
+        </aside>
 
-            <div className="flex items-center gap-2">
-              {selected.length > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  {selected.length} selecionado(s)
-                </span>
+        {/* Conteúdo */}
+        <div className="flex-1 min-w-0 space-y-4">
+          {/* Search + tag filter + actions */}
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <div className="relative max-w-md flex-1">
+                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome, email, telefone, categoria..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <ExportButton leads={filtered} selectedLeads={selected} />
+              </div>
+
+              {/* Filtro por etiquetas */}
+              {tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Etiquetas:</span>
+                  {tags.map((t) => (
+                    <TagPill
+                      key={t.id}
+                      name={t.name}
+                      color={t.color}
+                      active={selectedTagIds.includes(t.id)}
+                      onClick={() => toggleTagFilter(t.id)}
+                    />
+                  ))}
+                  {selectedTagIds.length > 0 && (
+                    <button
+                      onClick={() => setSelectedTagIds([])}
+                      className="text-xs text-muted-foreground hover:text-slate-700 flex items-center gap-0.5"
+                    >
+                      <X className="h-3 w-3" /> limpar
+                    </button>
+                  )}
+                </div>
               )}
-              <ExportButton leads={filtered} selectedLeads={selected} />
-            </div>
-          </div>
 
-          <LeadFilters
-            leads={leads}
-            filters={filters}
-            onFiltersChange={setFilters}
-          />
-        </CardContent>
-      </Card>
+              <LeadFilters leads={leads} filters={filters} onFiltersChange={setFilters} />
+            </CardContent>
+          </Card>
 
-      {/* Resultados */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="py-20 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          {/* Barra de ações em massa */}
+          {selected.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-orange-50/50 px-4 py-2">
+              <span className="text-sm font-medium text-slate-700">{selected.length} selecionado(s)</span>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <FolderInput className="h-4 w-4" />
+                    Adicionar a segmento
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                  <DropdownMenuLabel>Segmentos</DropdownMenuLabel>
+                  {segments.length === 0 && (
+                    <DropdownMenuItem disabled>Nenhum segmento ainda</DropdownMenuItem>
+                  )}
+                  {segments.map((s) => (
+                    <DropdownMenuItem key={s.id} onClick={() => handleAddToSegment(s.id)}>
+                      <span className="h-2.5 w-2.5 rounded-full mr-2" style={{ backgroundColor: s.color || "#94a3b8" }} />
+                      {s.name}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setEditingSegment(null);
+                      setShowSegmentDialog(true);
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Novo segmento
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <TagsIcon className="h-4 w-4" />
+                    Aplicar etiqueta
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                  <DropdownMenuLabel>Etiquetas</DropdownMenuLabel>
+                  {tags.length === 0 && <DropdownMenuItem disabled>Nenhuma etiqueta ainda</DropdownMenuItem>}
+                  {tags.map((t) => (
+                    <DropdownMenuItem key={t.id} onClick={() => handleApplyTag(t.id)}>
+                      <span className="h-2.5 w-2.5 rounded-full mr-2" style={{ backgroundColor: t.color }} />
+                      {t.name}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setShowTagsDialog(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Gerenciar etiquetas
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {activeSegment && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-red-600 border-red-200 hover:text-red-700"
+                  onClick={handleRemoveFromSegment}
+                >
+                  <X className="h-4 w-4" />
+                  Remover de "{activeSegment.name}"
+                </Button>
+              )}
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-16 text-center space-y-3">
-              <Database className="h-12 w-12 mx-auto text-muted-foreground/40" />
-              {leads.length === 0 ? (
-                <>
-                  <h3 className="font-medium">Sua base ainda está vazia</h3>
-                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                    Vá em <strong>Buscar Leads</strong> pra começar a coletar contatos do Google
-                    Maps.
-                  </p>
-                </>
+          )}
+
+          {/* Resultados */}
+          <Card>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="py-20 flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="py-16 text-center space-y-3">
+                  <Database className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  {leads.length === 0 ? (
+                    <>
+                      <h3 className="font-medium">Sua base ainda está vazia</h3>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Vá em <strong>Buscar Leads</strong> pra começar a coletar contatos do Google Maps.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="font-medium">Nenhum lead corresponde aos filtros</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Limpe os filtros, o segmento ou as etiquetas pra ver mais leads.
+                      </p>
+                    </>
+                  )}
+                </div>
               ) : (
                 <>
-                  <h3 className="font-medium">Nenhum lead corresponde aos filtros</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Limpe os filtros ou a busca pra ver todos os leads.
-                  </p>
+                  <div className="px-4 py-3 border-b bg-slate-50/50 text-sm text-muted-foreground flex justify-between items-center">
+                    <span>
+                      Mostrando {paginated.length} de {filtered.length}
+                      {filtered.length < leads.length && (
+                        <span className="ml-2 text-xs">(filtrado de {leads.length} total)</span>
+                      )}
+                    </span>
+                    <span className="text-xs">
+                      Página {safePage} de {totalPages}
+                    </span>
+                  </div>
+                  <LeadTable
+                    leads={paginated}
+                    selectedLeads={selected}
+                    onSelectionChange={setSelected}
+                    onDelete={handleDelete}
+                    renderTags={renderLeadTags}
+                  />
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Paginação */}
+          {filtered.length > LEADS_PER_PAGE && (
+            <div className="flex justify-center items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </Button>
+              <span className="text-sm px-3">
+                {safePage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Próxima
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-          ) : (
-            <>
-              <div className="px-4 py-3 border-b bg-slate-50/50 text-sm text-muted-foreground flex justify-between items-center">
-                <span>
-                  Mostrando {paginated.length} de {filtered.length}
-                  {filtered.length < leads.length && (
-                    <span className="ml-2 text-xs">(filtrado de {leads.length} total)</span>
-                  )}
-                </span>
-                <span className="text-xs">
-                  Página {safePage} de {totalPages}
-                </span>
-              </div>
-              <LeadTable
-                leads={paginated}
-                selectedLeads={selected}
-                onSelectionChange={setSelected}
-                onDelete={handleDelete}
-              />
-            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Dialog: adicionar lead manualmente */}
       <Dialog
@@ -367,9 +636,7 @@ export default function LeadsDatabase() {
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <Label className="text-sm">Tem WhatsApp?</Label>
-                <p className="text-xs text-muted-foreground">
-                  Marque se você sabe que o telefone tem WhatsApp ativo.
-                </p>
+                <p className="text-xs text-muted-foreground">Marque se você sabe que o telefone tem WhatsApp ativo.</p>
               </div>
               <Switch
                 checked={newLead.hasWhatsApp}
@@ -399,32 +666,41 @@ export default function LeadsDatabase() {
         </DialogContent>
       </Dialog>
 
-      {/* Paginação */}
-      {filtered.length > LEADS_PER_PAGE && (
-        <div className="flex justify-center items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={safePage === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Anterior
-          </Button>
-          <span className="text-sm px-3">
-            {safePage} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={safePage === totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Próxima
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      {/* Dialogs de segmento e etiquetas */}
+      <SegmentDialog
+        open={showSegmentDialog}
+        onOpenChange={setShowSegmentDialog}
+        editing={editingSegment}
+        tags={tags}
+        onSave={handleSaveSegment}
+      />
+      <ManageTagsDialog
+        open={showTagsDialog}
+        onOpenChange={setShowTagsDialog}
+        tags={tags}
+        onCreate={async (name, color) => {
+          try {
+            await createTag({ name, color });
+          } catch (e) {
+            toast({ variant: "destructive", title: "Erro ao criar etiqueta", description: (e as Error).message });
+          }
+        }}
+        onUpdate={async (id, patch) => {
+          try {
+            await updateTag({ id, ...patch });
+          } catch (e) {
+            toast({ variant: "destructive", title: "Erro ao editar etiqueta", description: (e as Error).message });
+          }
+        }}
+        onDelete={async (id) => {
+          try {
+            await deleteTag(id);
+            setSelectedTagIds((prev) => prev.filter((t) => t !== id));
+          } catch (e) {
+            toast({ variant: "destructive", title: "Erro ao excluir etiqueta", description: (e as Error).message });
+          }
+        }}
+      />
     </div>
   );
 }
@@ -452,9 +728,7 @@ function StatCard({
     <Card className="border-none shadow-sm">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-            {label}
-          </span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</span>
           <div className={`p-1.5 rounded ${colorMap[color]}`}>
             <Icon className="h-3.5 w-3.5" />
           </div>

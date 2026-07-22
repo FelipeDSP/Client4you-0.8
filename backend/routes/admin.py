@@ -700,23 +700,70 @@ async def delete_user_completely(
         except Exception as e:
             logger.warning(f"Erro ao deletar email_* do user: {e}")
 
-        # 8. Deletar profile
+        # 7c. 2FA — FK user_2fa.user_id → auth.users SEM cascade: se sobrar, a
+        # deleção do auth.users abaixo é BLOQUEADA e o usuário vira órfão.
+        try:
+            db.client.table('user_2fa').delete().eq('user_id', user_id).execute()
+            logger.info(f"✅ user_2fa deletado para {user_id}")
+        except Exception as e:
+            logger.warning(f"Erro ao deletar user_2fa: {e}")
+
+        # 7d. audit_logs — FK sem cascade, mas user_id é nullable: DESvincula
+        # (preserva o histórico; user_email fica como texto) em vez de apagar.
+        try:
+            db.client.table('audit_logs').update({'user_id': None}).eq('user_id', user_id).execute()
+            logger.info(f"✅ audit_logs desvinculados de {user_id}")
+        except Exception as e:
+            logger.warning(f"Erro ao desvincular audit_logs: {e}")
+
+        # 7e. ip_whitelist.created_by — FK sem cascade, nullable: desvincula pra
+        # não apagar a regra de IP (config de segurança da empresa, não do user).
+        try:
+            db.client.table('ip_whitelist').update({'created_by': None}).eq('created_by', user_id).execute()
+            logger.info(f"✅ ip_whitelist.created_by desvinculado de {user_id}")
+        except Exception as e:
+            logger.warning(f"Erro ao desvincular ip_whitelist: {e}")
+
+        # 8. Deletar profile (FK profiles.id → auth.users; tem que ir antes do auth)
         db.client.table('profiles').delete().eq('id', user_id).execute()
         logger.info(f"✅ Profile deletado para {user_id}")
-        
-        # 9. CRÍTICO: Deletar da tabela auth.users usando admin API
+
+        # 9. CRÍTICO: Deletar de auth.users (Admin API). Esta é a fonte do bloqueio
+        # de re-cadastro — se falhar aqui, o usuário vira ÓRFÃO (some da gestão, que
+        # lê de profiles, mas o e-mail continua barrado com 422). Por isso NÃO
+        # engolimos o erro: propagamos pra deleção não reportar sucesso falso.
         try:
-            # Usar service_role para deletar usuário do Auth
-            response = db.client.auth.admin.delete_user(user_id)
+            db.client.auth.admin.delete_user(user_id)
             logger.info(f"✅ Usuário deletado do Supabase Auth: {user_id}")
         except Exception as e:
-            error_msg = str(e)
-            # Se o usuário não foi encontrado ou já foi deletado, considerar sucesso
-            if "not found" in error_msg.lower() or "user not allowed" in error_msg.lower():
-                logger.warning(f"⚠️ Usuário já removido do auth ou sem permissão: {user_id}")
+            error_msg = str(e).lower()
+            # "not found" = já não existe no auth → tratamos como sucesso (idempotente)
+            if "not found" in error_msg:
+                logger.warning(f"⚠️ Usuário já não existia no auth: {user_id}")
             else:
                 logger.error(f"❌ ERRO ao deletar do auth.users: {e}")
-                # Não levantar exceção, pois já deletamos do banco
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "Os dados do usuário foram removidos, mas a exclusão do Supabase "
+                        "Auth falhou — o e-mail pode continuar bloqueado. Tente excluir de "
+                        "novo, ou rode a limpeza de órfãos (DELETE /api/admin/orphan-users)."
+                    )
+                )
+
+        # 9b. Verificação anti-órfão: confirma que o usuário sumiu do auth.
+        # get_user_by_id lança quando não existe — isso é o resultado esperado.
+        try:
+            check = db.client.auth.admin.get_user_by_id(user_id)
+            still_exists = bool(check and getattr(check, 'user', None))
+        except Exception:
+            still_exists = False
+        if still_exists:
+            logger.error(f"❌ Usuário {user_id} AINDA existe no auth após a deleção")
+            raise HTTPException(
+                status_code=500,
+                detail="Falha ao remover o usuário do Supabase Auth (ainda presente após a exclusão)."
+            )
         
         # LOG DE AUDITORIA
         await audit.log_action(

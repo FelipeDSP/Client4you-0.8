@@ -385,21 +385,26 @@ export function useLeads() {
   // estão na Base — evita duplicar quando o usuário salva de buscas diferentes.
   const saveLeadsToBaseMutation = useMutation({
     mutationFn: async (leadIds: string[]) => {
-      if (!user?.companyId || leadIds.length === 0) return { saved: 0, skipped: 0 };
+      const empty = { saved: 0, skipped: 0, baseLeadIds: [] as string[] };
+      if (!user?.companyId || leadIds.length === 0) return empty;
       const companyId = user.companyId;
 
       // Chave de identidade: nome + endereço, normalizados
       const keyOf = (name?: string | null, address?: string | null) =>
         `${(name || "").trim().toLowerCase()}|${(address || "").trim().toLowerCase()}`;
 
-      // 1) Empresas que já estão na Base (leads salvos)
+      // 1) Leads já na Base (salvos) → mapeia chave → id da linha da base
       const { data: baseRows, error: baseErr } = await supabase
         .from("leads")
-        .select("name, address")
+        .select("id, name, address")
         .eq("company_id", companyId)
         .not("saved_at", "is", null);
       if (baseErr) throw baseErr;
-      const seen = new Set((baseRows || []).map((r: any) => keyOf(r.name, r.address)));
+      const keyToBaseId = new Map<string, string>();
+      for (const r of (baseRows || []) as any[]) {
+        const k = keyOf(r.name, r.address);
+        if (!keyToBaseId.has(k)) keyToBaseId.set(k, r.id);
+      }
 
       // 2) Dados dos candidatos selecionados (só os transitórios ainda não salvos)
       const { data: candidates, error: candErr } = await supabase
@@ -410,13 +415,21 @@ export function useLeads() {
         .is("saved_at", null);
       if (candErr) throw candErr;
 
-      // 3) Filtra: pula os que já estão na Base (ou repetidos no próprio lote)
+      // 3) Filtra: pula os que já estão na Base (ou repetidos no lote), mas
+      // registra o id da base correspondente pra vincular a segmento/etiqueta.
+      const seen = new Map(keyToBaseId); // chave → id da base (cresce no lote)
       const toSave: string[] = [];
+      const baseLeadIds: string[] = [];
       for (const c of (candidates || []) as any[]) {
         const k = keyOf(c.name, c.address);
-        if (seen.has(k)) continue;
-        seen.add(k);
+        const existing = seen.get(k);
+        if (existing) {
+          baseLeadIds.push(existing); // já na base → usa a linha existente
+          continue;
+        }
+        seen.set(k, c.id); // esta linha passa a ser a da base
         toSave.push(c.id);
+        baseLeadIds.push(c.id);
       }
       const skipped = leadIds.length - toSave.length;
 
@@ -432,7 +445,8 @@ export function useLeads() {
         if (error) throw error;
       }
 
-      return { saved: toSave.length, skipped };
+      // Dedup: mesma linha da base pode aparecer 2x se duas candidatas colidirem
+      return { saved: toSave.length, skipped, baseLeadIds: Array.from(new Set(baseLeadIds)) };
     },
     onSuccess: () => {
       // Invalida a Base — refetch traz os recém-salvos

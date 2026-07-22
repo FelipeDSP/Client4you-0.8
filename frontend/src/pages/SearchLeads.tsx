@@ -9,6 +9,8 @@ import { ExportButton } from "@/components/ExportButton";
 import { QuotaLimitModal } from "@/components/QuotaLimitModal";
 import { EnrichmentProgress } from "@/components/EnrichmentProgress";
 import { useLeads, QuotaExhaustedError } from "@/hooks/useLeads";
+import { useSegmentsAndTags } from "@/hooks/useSegmentsAndTags";
+import { SaveToBaseDialog } from "@/components/leads/SaveToBaseDialog";
 import { useQuotas } from "@/hooks/useQuotas";
 import { usePageTitle } from "@/contexts/PageTitleContext";
 import { Lead } from "@/types";
@@ -55,18 +57,36 @@ export default function SearchLeads() {
     enrichmentProgress,
   } = useLeads();
   const { toast } = useToast();
+  const { addLeadsToSegment, addTagToLeads } = useSegmentsAndTags();
   const [isReenriching, setIsReenriching] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
 
-  const handleSaveToBase = async () => {
+  const handleSaveToBase = () => {
     if (selectedLeads.length === 0) return;
+    setShowSaveDialog(true);
+  };
+
+  const handleConfirmSave = async ({ segmentIds, tagIds }: { segmentIds: string[]; tagIds: string[] }) => {
     try {
       const result = await saveLeadsToBase(selectedLeads);
-      const skippedMsg = result.skipped > 0
-        ? ` ${result.skipped} já estava(m) na base (ignorado(s)).`
-        : "";
+      const ids = result.baseLeadIds;
+
+      // Vincula os leads (novos + os que já estavam na base) aos segmentos/etiquetas
+      const ops: Promise<any>[] = [];
+      if (ids.length > 0) {
+        for (const segmentId of segmentIds) ops.push(addLeadsToSegment({ segmentId, leadIds: ids }));
+        for (const tagId of tagIds) ops.push(addTagToLeads({ tagId, leadIds: ids }));
+      }
+      await Promise.all(ops);
+
+      const parts: string[] = [`${result.saved} lead(s) salvos.`];
+      if (result.skipped > 0) parts.push(`${result.skipped} já estava(m) na base.`);
+      if (segmentIds.length > 0) parts.push(`Em ${segmentIds.length} segmento(s).`);
+      if (tagIds.length > 0) parts.push(`${tagIds.length} etiqueta(s) aplicada(s).`);
+
       toast({
-        title: result.saved > 0 ? "Adicionados à Base de Leads" : "Nada novo para salvar",
-        description: `${result.saved} lead(s) salvos.${skippedMsg} Vá em Base de Leads para visualizar.`,
+        title: result.saved > 0 ? "Adicionados à Base de Leads" : "Base atualizada",
+        description: parts.join(" "),
         className: "border-l-4 border-green-500",
       });
       setSelectedLeads([]);
@@ -76,6 +96,7 @@ export default function SearchLeads() {
         title: "Erro ao salvar",
         description: (e as Error).message || "Tente novamente.",
       });
+      throw e;
     }
   };
 
@@ -437,6 +458,13 @@ export default function SearchLeads() {
       <QuotaLimitModal
         open={showQuotaModal}
         onOpenChange={setShowQuotaModal}
+      />
+
+      <SaveToBaseDialog
+        open={showSaveDialog}
+        onOpenChange={setShowSaveDialog}
+        leadCount={selectedLeads.length}
+        onConfirm={handleConfirmSave}
       />
     </div>
   );

@@ -119,40 +119,16 @@ export default function Admin() {
   const [showReauthDialog, setShowReauthDialog] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  // Check if re-auth is needed
+  // Re-auth do painel: pede a senha 1x por sessão de login. Uma vez confirmada,
+  // não repete mais enquanto a sessão estiver ativa (o flag é limpo no logout).
   useEffect(() => {
-    const checkReauth = () => {
-      const reauthTime = sessionStorage.getItem('admin_reauth_time');
-      const reauthExpires = sessionStorage.getItem('admin_reauth_expires');
-      
-      if (!reauthTime || !reauthExpires) {
-        // No reauth yet, show dialog
-        setShowReauthDialog(true);
-        setIsAuthenticated(false);
-        return;
-      }
-      
-      const now = Date.now();
-      const expires = parseInt(reauthExpires);
-      
-      if (now > expires) {
-        // Reauth expired, show dialog again
-        sessionStorage.removeItem('admin_reauth_time');
-        sessionStorage.removeItem('admin_reauth_expires');
-        setShowReauthDialog(true);
-        setIsAuthenticated(false);
-      } else {
-        // Still valid
-        setIsAuthenticated(true);
-      }
-    };
-    
-    if (isAdmin) {
-      checkReauth();
-      
-      // Check every minute if reauth expired
-      const interval = setInterval(checkReauth, 60000);
-      return () => clearInterval(interval);
+    if (!isAdmin) return;
+
+    if (sessionStorage.getItem('admin_reauth_ok') === 'true') {
+      setIsAuthenticated(true);
+    } else {
+      setShowReauthDialog(true);
+      setIsAuthenticated(false);
     }
   }, [isAdmin]);
   

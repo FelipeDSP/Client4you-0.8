@@ -82,9 +82,9 @@ export function AdminReauthDialog({ open, onSuccess, onCancel }: AdminReauthDial
         description: "Identidade confirmada. Bem-vindo ao painel administrativo.",
       });
 
-      // Store reauth timestamp
-      sessionStorage.setItem('admin_reauth_time', Date.now().toString());
-      sessionStorage.setItem('admin_reauth_expires', (Date.now() + 1800000).toString()); // 30 min
+      // Re-auth válida por toda a sessão de login (não expira a cada 30 min).
+      // É limpa no logout / logout por outro dispositivo (useAuth).
+      sessionStorage.setItem('admin_reauth_ok', 'true');
 
       onSuccess();
     } catch (error: any) {

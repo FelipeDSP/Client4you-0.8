@@ -79,7 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[useAuth] Sessão expirada - outro dispositivo logou');
     localStorage.removeItem(SESSION_TOKEN_KEY);
     setSessionToken(null);
-    
+    sessionStorage.removeItem('isAdmin');
+    sessionStorage.removeItem('admin_reauth_ok');
+
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -180,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     sessionStorage.removeItem('isAdmin');
+    sessionStorage.removeItem('admin_reauth_ok');
   };
 
   return (

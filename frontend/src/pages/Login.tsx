@@ -4,9 +4,11 @@ import { Loader2, Mail, Lock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { setRememberMe } from "@/integrations/supabase/client";
 
 // Validação simples de email
 const isValidEmail = (email: string): boolean => {
@@ -20,6 +22,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [remember, setRemember] = useState(true);
   const { login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -56,6 +59,9 @@ export default function Login() {
     }
     
     setIsLoading(true);
+
+    // Define onde a sessão será guardada ANTES do login (local vs sessionStorage)
+    setRememberMe(remember);
 
     const result = await login(email.trim(), password);
 
@@ -153,6 +159,22 @@ export default function Login() {
                   {passwordError}
                 </p>
               )}
+            </div>
+
+            {/* Manter logado */}
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="remember-me"
+                checked={remember}
+                onCheckedChange={(value) => setRemember(value === true)}
+                className="border-slate-500 data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500 data-[state=checked]:text-white"
+              />
+              <Label
+                htmlFor="remember-me"
+                className="text-sm font-normal text-slate-300 cursor-pointer select-none"
+              >
+                Manter conectado neste dispositivo
+              </Label>
             </div>
           </CardContent>
           <CardFooter className="flex-col gap-4 pt-4">

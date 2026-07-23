@@ -26,6 +26,8 @@ interface LeadFiltersProps {
   leads: Lead[];
   filters: LeadFilterState;
   onFiltersChange: (filters: LeadFilterState) => void;
+  /** Esconde a busca interna (quando a página já tem a sua). Default: mostra. */
+  showSearch?: boolean;
 }
 
 export const defaultFilters: LeadFilterState = {
@@ -36,7 +38,7 @@ export const defaultFilters: LeadFilterState = {
   minReviews: 0,
 };
 
-export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProps) {
+export function LeadFilters({ leads, filters, onFiltersChange, showSearch = true }: LeadFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const activeFiltersCount = useMemo(() => {
@@ -54,16 +56,18 @@ export function LeadFilters({ leads, filters, onFiltersChange }: LeadFiltersProp
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {/* Barra de Pesquisa */}
-      <div className="relative flex-1 min-w-[200px] max-w-[400px]">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Filtrar por nome na página atual..."
-          value={filters.search}
-          onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
-          className="w-full pl-9 bg-white border-slate-200 focus:border-orange-500"
-        />
-      </div>
+      {/* Barra de Pesquisa (opcional — a Base de Leads já tem a sua) */}
+      {showSearch && (
+        <div className="relative flex-1 min-w-[200px] max-w-[400px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Filtrar por nome na página atual..."
+            value={filters.search}
+            onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
+            className="w-full pl-9 bg-white border-slate-200 focus:border-orange-500"
+          />
+        </div>
+      )}
 
       {/* Botão de Filtros Avançados */}
       <Popover open={isOpen} onOpenChange={setIsOpen}>

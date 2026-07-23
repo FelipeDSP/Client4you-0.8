@@ -49,6 +49,7 @@ base do Lovable (não use pra setup novo — use o `schema.sql`). Ordem:
 | 18 | `migration_v17_fix_signup_quota_trigger.sql` | **Fix crítico**: trigger `handle_new_user_quota` inseria colunas mortas (`plan_type`/`plan_name`/`plan_expires_at`) em `user_quotas` → todo cadastro novo dava "Database error creating new user". Quota passa a nascer dentro de `handle_new_user`; trigger/função obsoletos removidos. |
 | 19 | `migration_v18_quota_overrides.sql` | Overrides de limite POR usuário em `user_quotas` (`leads_limit_override`, `campaigns_limit_override`, `messages_limit_override`). NULL = usa PLAN_LIMITS; -1 = ilimitado. Faz o painel admin realmente aplicar os limites digitados. |
 | 20 | `migration_v19_segment_folders.sql` | **Pastas de segmentos** (estilo Brevo/Mautic): nova tabela `segment_folders` + coluna `lead_segments.folder_id` (ON DELETE SET NULL). Agrupa os segmentos numa camada por cima; apagar a pasta solta os segmentos (não apaga). RLS company-scoped. |
+| 21 | `migration_v20_drop_segment_tags.sql` | **Remove `segment_tags`** (etiqueta↔segmento, do v16). Papéis afiados: Segmento = lista de leads (com Pastas), Etiqueta = rótulo só de leads. Só apaga os vínculos segmento↔etiqueta; não toca em tags/segmentos/leads. |
 
 ## Limpeza (2026-07-21)
 

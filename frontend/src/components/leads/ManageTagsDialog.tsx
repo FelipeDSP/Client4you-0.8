@@ -74,7 +74,8 @@ export function ManageTagsDialog({ open, onOpenChange, tags, onCreate, onUpdate,
         <DialogHeader>
           <DialogTitle>Gerenciar etiquetas</DialogTitle>
           <DialogDescription>
-            Etiquetas coloridas pra marcar leads e segmentos. Compartilhadas com a empresa.
+            Rótulos rápidos pra marcar leads (ex.: quente, respondeu, sem site) e filtrar por eles.
+            Compartilhadas com a empresa.
           </DialogDescription>
         </DialogHeader>
 

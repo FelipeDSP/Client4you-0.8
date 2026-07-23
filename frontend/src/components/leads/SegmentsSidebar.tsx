@@ -35,13 +35,11 @@ import {
   CornerDownRight,
 } from "lucide-react";
 import { useState } from "react";
-import { TagPill } from "./TagPill";
-import type { Segment, Folder, Tag } from "@/hooks/useSegmentsAndTags";
+import type { Segment, Folder } from "@/hooks/useSegmentsAndTags";
 
 interface SegmentsSidebarProps {
   segments: Segment[];
   folders: Folder[];
-  tags: Tag[];
   leadsTotal: number;
   activeSegmentId: string | null;
   activeFolderId: string | null;
@@ -60,7 +58,6 @@ interface SegmentsSidebarProps {
 export function SegmentsSidebar({
   segments,
   folders,
-  tags,
   leadsTotal,
   activeSegmentId,
   activeFolderId,
@@ -75,7 +72,6 @@ export function SegmentsSidebar({
   onMoveSegment,
   onManageTags,
 }: SegmentsSidebarProps) {
-  const tagById = new Map(tags.map((t) => [t.id, t]));
   const [pendingDeleteSeg, setPendingDeleteSeg] = useState<Segment | null>(null);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<Folder | null>(null);
   // Pastas recolhidas (por padrão todas expandidas). Guarda só as recolhidas.
@@ -108,14 +104,6 @@ export function SegmentsSidebar({
             </span>
             <span className="ml-auto text-xs text-muted-foreground shrink-0">{seg.leadCount}</span>
           </span>
-          {seg.tagIds.length > 0 && (
-            <span className="flex flex-wrap gap-1 mt-1 pl-[18px]">
-              {seg.tagIds.map((tid) => {
-                const t = tagById.get(tid);
-                return t ? <TagPill key={tid} name={t.name} color={t.color} /> : null;
-              })}
-            </span>
-          )}
         </button>
 
         <DropdownMenu>

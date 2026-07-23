@@ -11,22 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
-import { TAG_COLORS, TagPill } from "./TagPill";
-import type { Segment, Tag } from "@/hooks/useSegmentsAndTags";
+import { TAG_COLORS } from "./TagPill";
+import type { Segment } from "@/hooks/useSegmentsAndTags";
 
 interface SegmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing?: Segment | null;
-  tags: Tag[];
-  onSave: (data: { name: string; color: string; description: string; tagIds: string[] }) => Promise<void>;
+  onSave: (data: { name: string; color: string; description: string }) => Promise<void>;
 }
 
-export function SegmentDialog({ open, onOpenChange, editing, tags, onSave }: SegmentDialogProps) {
+export function SegmentDialog({ open, onOpenChange, editing, onSave }: SegmentDialogProps) {
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(TAG_COLORS[7]);
   const [description, setDescription] = useState("");
-  const [tagIds, setTagIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -34,19 +32,15 @@ export function SegmentDialog({ open, onOpenChange, editing, tags, onSave }: Seg
       setName(editing?.name || "");
       setColor(editing?.color || TAG_COLORS[7]);
       setDescription(editing?.description || "");
-      setTagIds(editing?.tagIds || []);
       setSaving(false);
     }
   }, [open, editing]);
-
-  const toggleTag = (id: string) =>
-    setTagIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
 
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), color, description: description.trim(), tagIds });
+      await onSave({ name: name.trim(), color, description: description.trim() });
       onOpenChange(false);
     } finally {
       setSaving(false);
@@ -59,7 +53,7 @@ export function SegmentDialog({ open, onOpenChange, editing, tags, onSave }: Seg
         <DialogHeader>
           <DialogTitle>{editing ? "Editar segmento" : "Novo segmento"}</DialogTitle>
           <DialogDescription>
-            Segmentos são pastas pra organizar seus leads. Um lead pode estar em vários.
+            Segmentos são listas de leads que você trabalha (ex.: uma campanha, uma região). Um lead pode estar em vários.
           </DialogDescription>
         </DialogHeader>
 
@@ -68,9 +62,12 @@ export function SegmentDialog({ open, onOpenChange, editing, tags, onSave }: Seg
             <Label htmlFor="seg-name">Nome *</Label>
             <Input
               id="seg-name"
-              placeholder="Ex.: Clientes quentes, Região Norte..."
+              placeholder="Ex.: Restaurantes SP, Clientes quentes..."
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && name.trim() && !saving) handleSave();
+              }}
               maxLength={80}
               autoFocus
             />
@@ -101,23 +98,6 @@ export function SegmentDialog({ open, onOpenChange, editing, tags, onSave }: Seg
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-
-          {tags.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Etiquetas do segmento</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {tags.map((t) => (
-                  <TagPill
-                    key={t.id}
-                    name={t.name}
-                    color={t.color}
-                    active={tagIds.includes(t.id)}
-                    onClick={() => toggleTag(t.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter>

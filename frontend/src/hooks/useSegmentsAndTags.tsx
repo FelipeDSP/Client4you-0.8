@@ -22,7 +22,6 @@ export interface Segment {
   description: string | null;
   folderId: string | null; // pasta que agrupa o segmento (null = raiz)
   createdAt: string;
-  tagIds: string[]; // etiquetas aplicadas ao próprio segmento
   leadCount: number; // qtde de leads dentro do segmento
 }
 
@@ -76,23 +75,22 @@ export function useSegmentsAndTags() {
     },
   });
 
-  // ── Segmentos (+ contagem de leads + etiquetas do segmento) ──────────────
+  // ── Segmentos (+ contagem de leads) ──────────────────────────────────────
   const segmentsQuery = useQuery<Segment[]>({
     queryKey: ["segments", companyId],
     enabled: !!companyId,
     queryFn: async () => {
-      const [segsRes, membersRes, segTagsRes] = await Promise.all([
-        sb.from("lead_segments").select("id, name, color, description, folder_id, created_at").eq("company_id", companyId).order("name"),
+      // select('*') (em vez de listar folder_id): se a migration v19 ainda não
+      // rodou, a coluna folder_id não existe — com '*' isso NÃO quebra (o campo
+      // só vem undefined → folderId null). Com colunas explícitas, daria erro.
+      const [segsRes, membersRes] = await Promise.all([
+        sb.from("lead_segments").select("*").eq("company_id", companyId).order("name"),
         sb.from("lead_segment_members").select("segment_id").eq("company_id", companyId),
-        sb.from("segment_tags").select("segment_id, tag_id").eq("company_id", companyId),
       ]);
       if (segsRes.error) throw segsRes.error;
 
       const counts: Record<string, number> = {};
       for (const m of membersRes.data || []) counts[m.segment_id] = (counts[m.segment_id] || 0) + 1;
-
-      const segTags: Record<string, string[]> = {};
-      for (const st of segTagsRes.data || []) (segTags[st.segment_id] ||= []).push(st.tag_id);
 
       return (segsRes.data || []).map((s: any) => ({
         id: s.id,
@@ -101,7 +99,6 @@ export function useSegmentsAndTags() {
         description: s.description,
         folderId: s.folder_id ?? null,
         createdAt: s.created_at,
-        tagIds: segTags[s.id] || [],
         leadCount: counts[s.id] || 0,
       }));
     },
@@ -316,28 +313,6 @@ export function useSegmentsAndTags() {
     onSuccess: invalidateAll,
   });
 
-  // ── Vínculo: etiqueta ↔ segmento ─────────────────────────────────────────
-  const setSegmentTag = useMutation({
-    mutationFn: async (input: { segmentId: string; tagId: string; on: boolean }) => {
-      if (input.on) {
-        const { error } = await sb.from("segment_tags").upsert(
-          [{ segment_id: input.segmentId, tag_id: input.tagId, company_id: companyId }],
-          { onConflict: "tag_id,segment_id", ignoreDuplicates: true },
-        );
-        if (error) throw error;
-      } else {
-        const { error } = await sb
-          .from("segment_tags")
-          .delete()
-          .eq("segment_id", input.segmentId)
-          .eq("tag_id", input.tagId)
-          .eq("company_id", companyId);
-        if (error) throw error;
-      }
-    },
-    onSuccess: invalidateAll,
-  });
-
   return {
     segments: segmentsQuery.data || [],
     folders: foldersQuery.data || [],
@@ -361,6 +336,5 @@ export function useSegmentsAndTags() {
     removeLeadsFromSegment: removeLeadsFromSegment.mutateAsync,
     addTagToLeads: addTagToLeads.mutateAsync,
     removeTagFromLeads: removeTagFromLeads.mutateAsync,
-    setSegmentTag: setSegmentTag.mutateAsync,
   };
 }

@@ -482,17 +482,8 @@ CREATE TABLE IF NOT EXISTS public.lead_tags (
     CONSTRAINT lead_tags_lead_fkey    FOREIGN KEY (lead_id)    REFERENCES public.leads(id)     ON DELETE CASCADE,
     CONSTRAINT lead_tags_company_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE
 );
-
-CREATE TABLE IF NOT EXISTS public.segment_tags (
-    tag_id uuid NOT NULL,
-    segment_id uuid NOT NULL,
-    company_id uuid NOT NULL,
-    added_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT segment_tags_pkey PRIMARY KEY (tag_id, segment_id),
-    CONSTRAINT segment_tags_tag_fkey     FOREIGN KEY (tag_id)     REFERENCES public.tags(id)          ON DELETE CASCADE,
-    CONSTRAINT segment_tags_segment_fkey FOREIGN KEY (segment_id) REFERENCES public.lead_segments(id) ON DELETE CASCADE,
-    CONSTRAINT segment_tags_company_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id)     ON DELETE CASCADE
-);
+-- NB: segment_tags (etiqueta↔segmento, do v16) foi REMOVIDA no v20 — etiqueta
+-- aplica-se só a leads. Ver migration_v20_drop_segment_tags.sql.
 
 -- =============================================================================
 -- 3 — ÍNDICES
@@ -554,8 +545,6 @@ CREATE INDEX IF NOT EXISTS idx_lsm_segment_id                   ON public.lead_s
 CREATE INDEX IF NOT EXISTS idx_lead_tags_company_id             ON public.lead_tags(company_id);
 CREATE INDEX IF NOT EXISTS idx_lead_tags_lead_id                ON public.lead_tags(lead_id);
 CREATE INDEX IF NOT EXISTS idx_lead_tags_tag_id                 ON public.lead_tags(tag_id);
-CREATE INDEX IF NOT EXISTS idx_segment_tags_company_id          ON public.segment_tags(company_id);
-CREATE INDEX IF NOT EXISTS idx_segment_tags_segment_id          ON public.segment_tags(segment_id);
 
 -- =============================================================================
 -- 4 — FUNÇÕES
@@ -682,7 +671,6 @@ ALTER TABLE public.lead_segments             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tags                      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_segment_members      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_tags                 ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.segment_tags              ENABLE ROW LEVEL SECURITY;
 
 -- ---- companies ----
 CREATE POLICY "companies_select_own_or_admin" ON public.companies
@@ -837,11 +825,6 @@ CREATE POLICY "lead_segment_members_company_scoped" ON public.lead_segment_membe
     WITH CHECK (company_id = public.user_company_id() OR public.is_super_admin());
 
 CREATE POLICY "lead_tags_company_scoped" ON public.lead_tags
-    FOR ALL TO authenticated
-    USING (company_id = public.user_company_id() OR public.is_super_admin())
-    WITH CHECK (company_id = public.user_company_id() OR public.is_super_admin());
-
-CREATE POLICY "segment_tags_company_scoped" ON public.segment_tags
     FOR ALL TO authenticated
     USING (company_id = public.user_company_id() OR public.is_super_admin())
     WITH CHECK (company_id = public.user_company_id() OR public.is_super_admin());

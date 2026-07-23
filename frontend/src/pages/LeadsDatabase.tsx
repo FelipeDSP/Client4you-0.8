@@ -52,9 +52,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLeads } from "@/hooks/useLeads";
-import { useSegmentsAndTags, type Segment } from "@/hooks/useSegmentsAndTags";
+import { useSegmentsAndTags, type Segment, type Folder } from "@/hooks/useSegmentsAndTags";
 import { SegmentsSidebar } from "@/components/leads/SegmentsSidebar";
 import { SegmentDialog } from "@/components/leads/SegmentDialog";
+import { FolderDialog } from "@/components/leads/FolderDialog";
 import { ManageTagsDialog } from "@/components/leads/ManageTagsDialog";
 import { TagPill } from "@/components/leads/TagPill";
 import { usePageTitle } from "@/contexts/PageTitleContext";
@@ -76,12 +77,17 @@ export default function LeadsDatabase() {
   const { leads, isLoading, deleteLead, clearAllLeads, addManualLead, isAddingManualLead } = useLeads();
   const {
     segments,
+    folders,
     tags,
     leadSegments,
     leadTags,
     createSegment,
     updateSegment,
     deleteSegment,
+    createFolder,
+    updateFolder,
+    deleteFolder,
+    moveSegmentToFolder,
     createTag,
     updateTag,
     deleteTag,
@@ -101,10 +107,23 @@ export default function LeadsDatabase() {
 
   // Organização
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [showSegmentDialog, setShowSegmentDialog] = useState(false);
   const [editingSegment, setEditingSegment] = useState<Segment | null>(null);
+  const [showFolderDialog, setShowFolderDialog] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
   const [showTagsDialog, setShowTagsDialog] = useState(false);
+
+  // Seleção segmento e pasta são mutuamente exclusivas.
+  const selectSegment = (id: string | null) => {
+    setActiveSegmentId(id);
+    setActiveFolderId(null);
+  };
+  const selectFolder = (id: string | null) => {
+    setActiveFolderId(id);
+    setActiveSegmentId(null);
+  };
 
   const [newLead, setNewLead] = useState({
     name: "",
@@ -136,12 +155,22 @@ export default function LeadsDatabase() {
     }
   };
 
-  // Filter combinado: segmento + etiquetas + search + filters
+  // ids dos segmentos dentro da pasta ativa (pra filtrar por pasta = união deles)
+  const activeFolderSegmentIds = useMemo(
+    () => (activeFolderId ? segments.filter((s) => s.folderId === activeFolderId).map((s) => s.id) : []),
+    [activeFolderId, segments],
+  );
+
+  // Filter combinado: segmento/pasta + etiquetas + search + filters
   const filtered = useMemo(() => {
     let result = leads;
 
     if (activeSegmentId) {
       result = result.filter((l) => (leadSegments[l.id] || []).includes(activeSegmentId));
+    } else if (activeFolderId) {
+      // pasta: lead que está em QUALQUER segmento da pasta
+      const segSet = new Set(activeFolderSegmentIds);
+      result = result.filter((l) => (leadSegments[l.id] || []).some((sid) => segSet.has(sid)));
     }
     if (selectedTagIds.length > 0) {
       result = result.filter((l) => {
@@ -158,7 +187,7 @@ export default function LeadsDatabase() {
       );
     }
     return filterLeads(result, filters);
-  }, [leads, activeSegmentId, selectedTagIds, leadSegments, leadTags, search, filters]);
+  }, [leads, activeSegmentId, activeFolderId, activeFolderSegmentIds, selectedTagIds, leadSegments, leadTags, search, filters]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / LEADS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
@@ -176,7 +205,7 @@ export default function LeadsDatabase() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters, search, activeSegmentId, selectedTagIds]);
+  }, [filters, search, activeSegmentId, activeFolderId, selectedTagIds]);
 
   const handleDelete = async (id: string) => {
     await deleteLead(id);
@@ -214,6 +243,32 @@ export default function LeadsDatabase() {
     } catch (e) {
       toast({ variant: "destructive", title: "Erro no segmento", description: (e as Error).message });
       throw e;
+    }
+  };
+
+  const handleSaveFolder = async (data: { name: string; color: string }) => {
+    try {
+      if (editingFolder) {
+        await updateFolder({ id: editingFolder.id, name: data.name, color: data.color });
+        toast({ title: "Pasta atualizada" });
+      } else {
+        await createFolder({ name: data.name, color: data.color });
+        toast({ title: "Pasta criada" });
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro na pasta", description: (e as Error).message });
+      throw e;
+    }
+  };
+
+  const handleMoveSegment = async (segmentId: string, folderId: string | null) => {
+    try {
+      await moveSegmentToFolder({ segmentId, folderId });
+      const seg = segments.find((s) => s.id === segmentId);
+      const dest = folderId ? folders.find((f) => f.id === folderId)?.name : "Sem pasta";
+      toast({ title: "Segmento movido", description: `"${seg?.name}" → ${dest}.` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao mover", description: (e as Error).message });
     }
   };
 
@@ -271,6 +326,7 @@ export default function LeadsDatabase() {
   };
 
   const activeSegment = segments.find((s) => s.id === activeSegmentId) || null;
+  const activeFolder = folders.find((f) => f.id === activeFolderId) || null;
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -279,7 +335,7 @@ export default function LeadsDatabase() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900">Base de Leads</h2>
           <p className="text-muted-foreground mt-1">
-            Organize seus leads em segmentos (pastas) e etiquetas. Um lead pode estar em vários segmentos.
+            Organize seus leads em segmentos e agrupe os segmentos em pastas. Um lead pode estar em vários segmentos.
           </p>
         </div>
 
@@ -333,10 +389,13 @@ export default function LeadsDatabase() {
             <CardContent className="p-3">
               <SegmentsSidebar
                 segments={segments}
+                folders={folders}
                 tags={tags}
                 leadsTotal={leads.length}
                 activeSegmentId={activeSegmentId}
-                onSelect={setActiveSegmentId}
+                activeFolderId={activeFolderId}
+                onSelectSegment={selectSegment}
+                onSelectFolder={selectFolder}
                 onNewSegment={() => {
                   setEditingSegment(null);
                   setShowSegmentDialog(true);
@@ -346,6 +405,16 @@ export default function LeadsDatabase() {
                   setShowSegmentDialog(true);
                 }}
                 onDeleteSegment={(id) => deleteSegment(id)}
+                onNewFolder={() => {
+                  setEditingFolder(null);
+                  setShowFolderDialog(true);
+                }}
+                onEditFolder={(folder) => {
+                  setEditingFolder(folder);
+                  setShowFolderDialog(true);
+                }}
+                onDeleteFolder={(id) => deleteFolder(id)}
+                onMoveSegment={handleMoveSegment}
                 onManageTags={() => setShowTagsDialog(true)}
               />
             </CardContent>
@@ -502,14 +571,31 @@ export default function LeadsDatabase() {
                 </div>
               ) : (
                 <>
-                  <div className="px-4 py-3 border-b bg-slate-50/50 text-sm text-muted-foreground flex justify-between items-center">
-                    <span>
-                      Mostrando {paginated.length} de {filtered.length}
-                      {filtered.length < leads.length && (
-                        <span className="ml-2 text-xs">(filtrado de {leads.length} total)</span>
+                  <div className="px-4 py-3 border-b bg-slate-50/50 text-sm text-muted-foreground flex justify-between items-center gap-3">
+                    <span className="flex items-center gap-2 min-w-0">
+                      {activeFolder && (
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-white border px-2 py-0.5 text-xs font-medium text-slate-700 shrink-0">
+                          <FolderInput className="h-3 w-3" style={{ color: activeFolder.color || "#94a3b8" }} />
+                          <span className="truncate max-w-[160px]">{activeFolder.name}</span>
+                        </span>
                       )}
+                      {activeSegment && (
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-white border px-2 py-0.5 text-xs font-medium text-slate-700 shrink-0">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: activeSegment.color || "#94a3b8" }}
+                          />
+                          <span className="truncate max-w-[160px]">{activeSegment.name}</span>
+                        </span>
+                      )}
+                      <span className="truncate">
+                        Mostrando {paginated.length} de {filtered.length}
+                        {filtered.length < leads.length && (
+                          <span className="ml-2 text-xs">(filtrado de {leads.length} total)</span>
+                        )}
+                      </span>
                     </span>
-                    <span className="text-xs">
+                    <span className="text-xs shrink-0">
                       Página {safePage} de {totalPages}
                     </span>
                   </div>
@@ -666,13 +752,19 @@ export default function LeadsDatabase() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialogs de segmento e etiquetas */}
+      {/* Dialogs de segmento, pasta e etiquetas */}
       <SegmentDialog
         open={showSegmentDialog}
         onOpenChange={setShowSegmentDialog}
         editing={editingSegment}
         tags={tags}
         onSave={handleSaveSegment}
+      />
+      <FolderDialog
+        open={showFolderDialog}
+        onOpenChange={setShowFolderDialog}
+        editing={editingFolder}
+        onSave={handleSaveFolder}
       />
       <ManageTagsDialog
         open={showTagsDialog}

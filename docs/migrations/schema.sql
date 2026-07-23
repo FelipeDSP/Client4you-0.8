@@ -414,19 +414,38 @@ CREATE TABLE IF NOT EXISTS public.enrichment_jobs (
     CONSTRAINT enrichment_jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Segmentos (pastas) + Etiquetas (tags) da Base de Leads — ver migration_v16.
+-- Segmentos (listas) + Etiquetas (tags) da Base de Leads — ver migration_v16.
 -- N:N: lead em vários segmentos e com várias etiquetas; tags também em segmentos.
+-- Pastas (segment_folders, v19) agrupam segmentos por cima (lead_segments.folder_id).
+
+-- Pastas que agrupam segmentos (v19). Não contêm leads direto.
+CREATE TABLE IF NOT EXISTS public.segment_folders (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    company_id uuid NOT NULL,
+    name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80),
+    color text,
+    position integer NOT NULL DEFAULT 0,
+    created_by uuid,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT segment_folders_pkey PRIMARY KEY (id),
+    CONSTRAINT segment_folders_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE,
+    CONSTRAINT segment_folders_created_by_fkey  FOREIGN KEY (created_by) REFERENCES auth.users(id)      ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.lead_segments (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
     company_id uuid NOT NULL,
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80),
     color text,
     description text,
+    folder_id uuid,                                -- pasta (segment_folders, v19); NULL = raiz
     created_by uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT lead_segments_pkey PRIMARY KEY (id),
     CONSTRAINT lead_segments_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE,
+    CONSTRAINT lead_segments_folder_id_fkey   FOREIGN KEY (folder_id)  REFERENCES public.segment_folders(id) ON DELETE SET NULL,
     CONSTRAINT lead_segments_created_by_fkey  FOREIGN KEY (created_by) REFERENCES auth.users(id)      ON DELETE SET NULL
 );
 
@@ -525,7 +544,9 @@ CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_batch_id         ON public.enrich
 CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_company_created  ON public.enrichment_jobs(company_id, created_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_company_name          ON public.tags(company_id, lower(name));
+CREATE INDEX IF NOT EXISTS idx_segment_folders_company_id       ON public.segment_folders(company_id);
 CREATE INDEX IF NOT EXISTS idx_lead_segments_company_id         ON public.lead_segments(company_id);
+CREATE INDEX IF NOT EXISTS idx_lead_segments_folder_id          ON public.lead_segments(folder_id);
 CREATE INDEX IF NOT EXISTS idx_tags_company_id                  ON public.tags(company_id);
 CREATE INDEX IF NOT EXISTS idx_lsm_company_id                   ON public.lead_segment_members(company_id);
 CREATE INDEX IF NOT EXISTS idx_lsm_lead_id                      ON public.lead_segment_members(lead_id);
@@ -656,6 +677,7 @@ ALTER TABLE public.email_campaign_recipients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_events              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.domain_email_cache        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.enrichment_jobs           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.segment_folders           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_segments             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tags                      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_segment_members      ENABLE ROW LEVEL SECURITY;
@@ -794,6 +816,11 @@ CREATE POLICY "enrichment_jobs_select_company_scoped" ON public.enrichment_jobs
     USING (company_id = public.user_company_id() OR public.is_super_admin());
 
 -- ---- segmentos + etiquetas (company-scoped, leitura/escrita por membros) ----
+CREATE POLICY "segment_folders_company_scoped" ON public.segment_folders
+    FOR ALL TO authenticated
+    USING (company_id = public.user_company_id() OR public.is_super_admin())
+    WITH CHECK (company_id = public.user_company_id() OR public.is_super_admin());
+
 CREATE POLICY "lead_segments_company_scoped" ON public.lead_segments
     FOR ALL TO authenticated
     USING (company_id = public.user_company_id() OR public.is_super_admin())

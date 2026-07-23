@@ -20,6 +20,7 @@ export interface Segment {
   name: string;
   color: string | null;
   description: string | null;
+  folderId: string | null; // pasta que agrupa o segmento (null = raiz)
   createdAt: string;
   tagIds: string[]; // etiquetas aplicadas ao próprio segmento
   leadCount: number; // qtde de leads dentro do segmento
@@ -29,6 +30,14 @@ export interface Tag {
   id: string;
   name: string;
   color: string;
+}
+
+// Pasta que agrupa segmentos (v19). Não contém leads diretamente.
+export interface Folder {
+  id: string;
+  name: string;
+  color: string | null;
+  position: number;
 }
 
 export function useSegmentsAndTags() {
@@ -51,13 +60,29 @@ export function useSegmentsAndTags() {
     },
   });
 
+  // ── Pastas (agrupam segmentos) ───────────────────────────────────────────
+  const foldersQuery = useQuery<Folder[]>({
+    queryKey: ["segment-folders", companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("segment_folders")
+        .select("id, name, color, position")
+        .eq("company_id", companyId)
+        .order("position")
+        .order("name");
+      if (error) throw error;
+      return (data || []).map((f: any) => ({ id: f.id, name: f.name, color: f.color, position: f.position ?? 0 }));
+    },
+  });
+
   // ── Segmentos (+ contagem de leads + etiquetas do segmento) ──────────────
   const segmentsQuery = useQuery<Segment[]>({
     queryKey: ["segments", companyId],
     enabled: !!companyId,
     queryFn: async () => {
       const [segsRes, membersRes, segTagsRes] = await Promise.all([
-        sb.from("lead_segments").select("id, name, color, description, created_at").eq("company_id", companyId).order("name"),
+        sb.from("lead_segments").select("id, name, color, description, folder_id, created_at").eq("company_id", companyId).order("name"),
         sb.from("lead_segment_members").select("segment_id").eq("company_id", companyId),
         sb.from("segment_tags").select("segment_id, tag_id").eq("company_id", companyId),
       ]);
@@ -74,6 +99,7 @@ export function useSegmentsAndTags() {
         name: s.name,
         color: s.color,
         description: s.description,
+        folderId: s.folder_id ?? null,
         createdAt: s.created_at,
         tagIds: segTags[s.id] || [],
         leadCount: counts[s.id] || 0,
@@ -114,10 +140,58 @@ export function useSegmentsAndTags() {
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["segments", companyId] });
+    queryClient.invalidateQueries({ queryKey: ["segment-folders", companyId] });
     queryClient.invalidateQueries({ queryKey: ["tags", companyId] });
     queryClient.invalidateQueries({ queryKey: ["lead-segments-map", companyId] });
     queryClient.invalidateQueries({ queryKey: ["lead-tags-map", companyId] });
   };
+
+  // ── Mutations: pastas ────────────────────────────────────────────────────
+  const createFolder = useMutation({
+    mutationFn: async (input: { name: string; color?: string | null }) => {
+      const { data, error } = await sb
+        .from("segment_folders")
+        .insert({ company_id: companyId, name: input.name.trim(), color: input.color || null, created_by: user?.id })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: invalidateAll,
+  });
+
+  const updateFolder = useMutation({
+    mutationFn: async (input: { id: string; name?: string; color?: string | null }) => {
+      const patch: any = { updated_at: new Date().toISOString() };
+      if (input.name !== undefined) patch.name = input.name.trim();
+      if (input.color !== undefined) patch.color = input.color;
+      const { error } = await sb.from("segment_folders").update(patch).eq("id", input.id).eq("company_id", companyId);
+      if (error) throw error;
+    },
+    onSuccess: invalidateAll,
+  });
+
+  const deleteFolder = useMutation({
+    mutationFn: async (id: string) => {
+      // ON DELETE SET NULL no folder_id: os segmentos voltam pra raiz, não são apagados.
+      const { error } = await sb.from("segment_folders").delete().eq("id", id).eq("company_id", companyId);
+      if (error) throw error;
+    },
+    onSuccess: invalidateAll,
+  });
+
+  // Move um segmento pra dentro de uma pasta (ou pra raiz com folderId = null).
+  const moveSegmentToFolder = useMutation({
+    mutationFn: async (input: { segmentId: string; folderId: string | null }) => {
+      const { error } = await sb
+        .from("lead_segments")
+        .update({ folder_id: input.folderId, updated_at: new Date().toISOString() })
+        .eq("id", input.segmentId)
+        .eq("company_id", companyId);
+      if (error) throw error;
+    },
+    onSuccess: invalidateAll,
+  });
 
   // ── Mutations: segmentos ─────────────────────────────────────────────────
   const createSegment = useMutation({
@@ -266,6 +340,7 @@ export function useSegmentsAndTags() {
 
   return {
     segments: segmentsQuery.data || [],
+    folders: foldersQuery.data || [],
     tags: tagsQuery.data || [],
     leadSegments: leadSegmentsQuery.data || {}, // leadId -> segmentId[]
     leadTags: leadTagsQuery.data || {}, // leadId -> tagId[]
@@ -274,6 +349,10 @@ export function useSegmentsAndTags() {
     createSegment: createSegment.mutateAsync,
     updateSegment: updateSegment.mutateAsync,
     deleteSegment: deleteSegment.mutateAsync,
+    createFolder: createFolder.mutateAsync,
+    updateFolder: updateFolder.mutateAsync,
+    deleteFolder: deleteFolder.mutateAsync,
+    moveSegmentToFolder: moveSegmentToFolder.mutateAsync,
     createTag: createTag.mutateAsync,
     updateTag: updateTag.mutateAsync,
     deleteTag: deleteTag.mutateAsync,
